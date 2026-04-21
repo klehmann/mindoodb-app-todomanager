@@ -1,0 +1,207 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b1020;
+  --bg-elevated: rgba(12, 18, 34, 0.94);
+  --bg-soft: rgba(27, 39, 70, 0.78);
+  --bg-muted: rgba(17, 27, 49, 0.82);
+  --border: rgba(118, 141, 191, 0.2);
+  --border-strong: rgba(212, 160, 23, 0.26);
+  --text: #eef2ff;
+  --muted: #a7b4cf;
+  --primary: #1f3a8a;
+  --primary-rgb: 31 58 138;
+  --accent: #d4a017;
+  --accent-rgb: 212 160 23;
+  --danger: #e27272;
+  --danger-rgb: 226 114 114;
+  --success: #3db58c;
+  --success-rgb: 61 181 140;
+  --shadow: 0 28px 80px rgba(1, 5, 16, 0.45);
+  --radius-xl: 32px;
+  --radius-lg: 24px;
+  --radius-md: 18px;
+  --radius-sm: 14px;
+  --surface-blur: blur(22px);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f7f9fc;
+  --bg-elevated: rgba(255, 255, 255, 0.94);
+  --bg-soft: rgba(244, 247, 255, 0.94);
+  --bg-muted: rgba(237, 241, 249, 0.94);
+  --border: rgba(31, 58, 138, 0.14);
+  --border-strong: rgba(212, 160, 23, 0.28);
+  --text: #17233b;
+  --muted: #667795;
+  --shadow: 0 28px 80px rgba(45, 65, 110, 0.16);
+}
+
+:root[data-theme-preset="mindoo"] {
+  --bg: #0b1020;
+  --bg-elevated: rgba(12, 18, 34, 0.94);
+  --bg-soft: rgba(27, 39, 70, 0.78);
+  --bg-muted: rgba(17, 27, 49, 0.82);
+  --border: rgba(118, 141, 191, 0.2);
+  --border-strong: rgba(212, 160, 23, 0.26);
+  --text: #eef2ff;
+  --muted: #a7b4cf;
+  --primary: #1f3a8a;
+  --primary-rgb: 31 58 138;
+  --accent: #d4a017;
+  --accent-rgb: 212 160 23;
+  --shadow: 0 28px 80px rgba(1, 5, 16, 0.45);
+}
+
+:root[data-theme="light"][data-theme-preset="mindoo"] {
+  color-scheme: light;
+  --bg: #f7f9fc;
+  --bg-elevated: rgba(255, 255, 255, 0.94);
+  --bg-soft: rgba(244, 247, 255, 0.94);
+  --bg-muted: rgba(237, 241, 249, 0.94);
+  --border: rgba(31, 58, 138, 0.14);
+  --border-strong: rgba(212, 160, 23, 0.28);
+  --text: #17233b;
+  --muted: #667795;
+  --shadow: 0 28px 80px rgba(45, 65, 110, 0.16);
+}
+
+:root[data-theme-preset="vega"] {
+  --bg: #07111f;
+  --bg-elevated: rgba(9, 16, 29, 0.95);
+  --bg-soft: rgba(17, 31, 54, 0.82);
+  --bg-muted: rgba(12, 21, 39, 0.88);
+  --border: rgba(82, 152, 247, 0.18);
+  --border-strong: rgba(232, 191, 60, 0.28);
+  --text: #f4f8ff;
+  --muted: #adc0dd;
+  --primary: #5298f7;
+  --primary-rgb: 82 152 247;
+  --accent: #e8bf3c;
+  --accent-rgb: 232 191 60;
+}
+
+:root[data-theme="light"][data-theme-preset="vega"] {
+  color-scheme: light;
+  --bg: #f8fbff;
+  --bg-elevated: rgba(255, 255, 255, 0.95);
+  --bg-soft: rgba(240, 246, 255, 0.95);
+  --bg-muted: rgba(231, 238, 248, 0.95);
+  --border: rgba(35, 99, 175, 0.14);
+  --border-strong: rgba(190, 150, 13, 0.28);
+  --text: #162238;
+  --muted: #697b97;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgb(var(--primary-rgb) / 0.16), transparent 28%),
+    radial-gradient(circle at bottom right, rgb(var(--accent-rgb) / 0.12), transparent 24%),
+    var(--bg);
+  color: var(--text);
+  transition:
+    background-color 260ms ease,
+    color 260ms ease;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.glass-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow);
+  backdrop-filter: var(--surface-blur);
+}
+
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.field__label,
+.panel__eyebrow {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.native-input,
+.native-textarea,
+.native-select {
+  width: 100%;
+  padding: 0.72rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: rgb(255 255 255 / 0.04);
+  color: inherit;
+}
+
+.native-textarea {
+  min-height: 8rem;
+  resize: vertical;
+}
+
+.pill-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.62rem 1rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.pill-button:hover {
+  transform: translateY(-1px);
+  border-color: var(--border-strong);
+}
+
+.pill-button--accent {
+  background: linear-gradient(135deg, rgb(var(--primary-rgb) / 0.18), rgb(var(--accent-rgb) / 0.16));
+}
+
+.panel__empty {
+  color: var(--muted);
+}
