@@ -3,7 +3,6 @@ import { computed, ref } from "vue";
 import Dialog from "primevue/dialog";
 import Menubar from "primevue/menubar";
 import type { MenuItem } from "primevue/menuitem";
-import MultiSelect from "primevue/multiselect";
 
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
 import { TODO_QUADRANTS, type TodoFilterMode, type TodoSortMode, type TodoSyncMode } from "@/features/todos/composables/todoTypes";
@@ -21,6 +20,8 @@ const refreshModeLabels: Record<TodoSyncMode, string> = {
   "60s": "Every 60 seconds",
 };
 
+const syncIndicatorVisible = computed(() => props.app.syncState.value === "syncing");
+
 const filterOptions: Array<{ label: string; value: TodoFilterMode }> = [
   { label: "Open", value: "open" },
   { label: "Completed", value: "completed" },
@@ -33,26 +34,6 @@ const sortOptions: Array<{ label: string; value: TodoSortMode }> = [
   { label: "Recently created", value: "created-desc" },
   { label: "Subject", value: "subject-asc" },
 ];
-
-const syncIconClass = computed(() => {
-  if (props.app.syncState.value === "syncing") {
-    return "pi pi-sync pi-spin";
-  }
-  if (props.app.syncState.value === "error") {
-    return "pi pi-exclamation-triangle";
-  }
-  return props.app.refreshMode.value === "off" ? "pi pi-cloud" : "pi pi-clock";
-});
-
-const syncIndicatorLabel = computed(() => {
-  if (props.app.syncState.value === "syncing") {
-    return "Syncing";
-  }
-  if (props.app.syncState.value === "error") {
-    return props.app.syncError.value ?? "Sync error";
-  }
-  return refreshModeLabels[props.app.refreshMode.value];
-});
 
 function refreshModeIcon(mode: TodoSyncMode) {
   return props.app.refreshMode.value === mode ? "pi pi-check" : undefined;
@@ -72,40 +53,29 @@ async function handleQuadrantDrop(quadrant: 1 | 2 | 3 | 4, event: DragEvent) {
   props.app.endDrag();
 }
 
-async function handleRecycleDrop(event: DragEvent) {
-  event.preventDefault();
-  await props.app.deleteTodos(props.app.draggedTodoIds.value);
-  props.app.endDrag();
-}
+const sourcesMenuIconOff = "pi pi-check toolbar__sources-menu-icon--off";
 
-const selectedDatabasesModel = computed({
-  get: () => props.app.selectedDatabaseIds.value,
-  set: (value: string[] | null | undefined) => {
-    void props.app.selectDatabases(value ?? []);
-  },
-});
+async function toggleSourceDatabase(databaseId: string) {
+  const ids = props.app.selectedDatabaseIds.value;
+  const isOn = ids.includes(databaseId);
+  if (isOn) {
+    if (ids.length <= 1) {
+      return;
+    }
+    await props.app.selectDatabases(ids.filter((id) => id !== databaseId));
+    return;
+  }
+  await props.app.selectDatabases([...ids, databaseId]);
+}
 
 const menuItems = computed<MenuItem[]>(() => [
   {
-    label: "File",
-    icon: "pi pi-file",
-    items: [
-      {
-        label: "New todo",
-        icon: "pi pi-plus",
-        disabled: !props.app.canCreateAny.value || props.app.isBusy.value,
-        command: () => {
-          props.app.startCreateTodo(props.app.activeMobileQuadrant.value);
-        },
-      },
-      {
-        label: "Refresh now",
-        icon: "pi pi-refresh",
-        command: () => {
-          void handleManualRefresh();
-        },
-      },
-    ],
+    label: "New todo",
+    icon: "pi pi-plus",
+    disabled: !props.app.canCreateAny.value || props.app.isBusy.value,
+    command: () => {
+      props.app.startCreateTodo(props.app.activeMobileQuadrant.value);
+    },
   },
   {
     label: "Selection",
@@ -176,6 +146,55 @@ const menuItems = computed<MenuItem[]>(() => [
     ],
   },
   {
+    label: "Sources",
+    icon: "pi pi-database",
+    items: [
+      {
+        label: "Filter",
+        icon: "pi pi-filter",
+        items: filterOptions.map((option) => ({
+          label: option.label,
+          icon: props.app.filterMode.value === option.value ? "pi pi-check" : sourcesMenuIconOff,
+          command: () => {
+            props.app.filterMode.value = option.value;
+          },
+        })),
+      },
+      {
+        label: "Sort",
+        icon: "pi pi-sort-amount-down",
+        items: sortOptions.map((option) => ({
+          label: option.label,
+          icon: props.app.sortMode.value === option.value ? "pi pi-check" : sourcesMenuIconOff,
+          command: () => {
+            props.app.sortMode.value = option.value;
+          },
+        })),
+      },
+      { separator: true },
+      ...props.app.databases.value.map((database) => {
+        const canRead = database.capabilities.includes("read");
+        const selected = props.app.selectedDatabaseIds.value.includes(database.id);
+        const base = {
+          label: database.title,
+          icon: canRead
+            ? (selected ? "pi pi-check" : sourcesMenuIconOff)
+            : sourcesMenuIconOff,
+          disabled: !canRead || props.app.isBusy.value,
+        };
+        if (!canRead) {
+          return base;
+        }
+        return {
+          ...base,
+          command: () => {
+            void toggleSourceDatabase(database.id);
+          },
+        };
+      }),
+    ],
+  },
+  {
     label: "Help",
     icon: "pi pi-question-circle",
     items: [
@@ -196,19 +215,20 @@ const menuItems = computed<MenuItem[]>(() => [
     class="toolbar glass-card glass-card--frost"
     :class="{ 'toolbar--ios-multitasking': props.app.hostUiPreferences.value.iosMultitaskingOptimized }"
   >
-    <Menubar :model="menuItems" class="toolbar__menubar">
-      <template #end>
-        <div
-          class="toolbar__sync-indicator"
-          :class="`toolbar__sync-indicator--${props.app.syncState.value}`"
-          :title="syncIndicatorLabel"
-          :aria-label="syncIndicatorLabel"
-        >
-          <i :class="syncIconClass" aria-hidden="true" />
-          <span class="toolbar__sync-text">{{ syncIndicatorLabel }}</span>
-        </div>
-      </template>
-    </Menubar>
+    <div class="toolbar__menu-row">
+      <Menubar :model="menuItems" class="toolbar__menubar">
+        <template #end>
+          <div
+            v-if="syncIndicatorVisible"
+            class="toolbar__sync-indicator"
+            aria-label="Refreshing"
+            title="Refreshing"
+          >
+            <i class="pi pi-sync pi-spin" aria-hidden="true" />
+          </div>
+        </template>
+      </Menubar>
+    </div>
 
     <div class="toolbar__subrow">
       <label class="toolbar__field toolbar__search">
@@ -222,57 +242,9 @@ const menuItems = computed<MenuItem[]>(() => [
         />
       </label>
 
-      <label class="toolbar__field">
-        <span>Filter</span>
-        <select
-          class="native-select"
-          :value="props.app.filterMode.value"
-          @change="props.app.filterMode.value = ($event.target as HTMLSelectElement).value as TodoFilterMode"
-        >
-          <option
-            v-for="option in filterOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
-      </label>
-
-      <label class="toolbar__field">
-        <span>Sort</span>
-        <select
-          class="native-select"
-          :value="props.app.sortMode.value"
-          @change="props.app.sortMode.value = ($event.target as HTMLSelectElement).value as TodoSortMode"
-        >
-          <option
-            v-for="option in sortOptions"
-            :key="option.value"
-            :value="option.value"
-          >
-            {{ option.label }}
-          </option>
-        </select>
-      </label>
-
-      <label class="toolbar__field">
-        <span>Database</span>
-        <MultiSelect
-          v-model="selectedDatabasesModel"
-          :options="props.app.databases.value"
-          option-label="title"
-          option-value="id"
-          display="chip"
-          :max-selected-labels="2"
-          placeholder="Choose databases"
-          class="toolbar__database-select"
-        />
-      </label>
-
       <div
         v-if="props.app.isCompactViewport.value"
-        class="toolbar__mobile-targets"
+        class="toolbar__mobile-targets toolbar__mobile-targets--full-row"
       >
         <button
           v-for="entry in TODO_QUADRANTS"
@@ -287,18 +259,6 @@ const menuItems = computed<MenuItem[]>(() => [
           {{ entry.quadrant }}
         </button>
       </div>
-
-      <button
-        type="button"
-        class="toolbar__recycle"
-        :disabled="!props.app.selectedCount.value && !props.app.draggedTodoIds.value.length"
-        @click="handleRecycle"
-        @dragover.prevent
-        @drop="handleRecycleDrop"
-      >
-        <i class="pi pi-trash" aria-hidden="true" />
-        <span>Recycle Bin</span>
-      </button>
     </div>
   </header>
 
@@ -321,8 +281,8 @@ const menuItems = computed<MenuItem[]>(() => [
         <li><strong>4:</strong> Not important and not due soon</li>
       </ul>
       <p>
-        Use the filter bar to search, filter, sort, and combine multiple databases in one view. Drag todos
-        between quadrants to re-prioritize them, or drag them to the recycle bin to delete them.
+        Use the search field for text and the Sources menu for filter, sort, and which databases to read from.
+        Drag todos between quadrants to re-prioritize them, or drag them to the recycle bin to delete them.
       </p>
       <p>
         Double click the background of a quadrant on desktop, or double tap it on touch devices, to create a
@@ -348,6 +308,17 @@ const menuItems = computed<MenuItem[]>(() => [
   margin-left: 80px;
 }
 
+.toolbar__menu-row {
+  padding: 0.45rem 0.65rem 0.52rem;
+  margin: 0 0.12rem;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--bg) 64%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.07),
+    0 10px 28px rgb(0 0 0 / 0.2);
+}
+
 :deep(.toolbar__menubar) {
   border: 0;
   background: transparent;
@@ -362,37 +333,48 @@ const menuItems = computed<MenuItem[]>(() => [
   border-radius: 0.8rem;
 }
 
+.toolbar__menu-row :deep(.p-menubar-item-label),
+.toolbar__menu-row :deep(.p-menubar-item-icon) {
+  color: var(--text);
+  text-shadow:
+    0 0 1px rgb(255 255 255 / 0.55),
+    0 0 10px rgb(255 255 255 / 0.22),
+    0 1px 2px rgb(0 0 0 / 0.75),
+    0 2px 14px rgb(0 0 0 / 0.35);
+}
+
+.toolbar__menu-row :deep(.p-menubar-item-link) {
+  color: var(--text);
+}
+
 .toolbar__sync-indicator {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.8rem;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
   border-radius: 999px;
   background: rgb(var(--primary-rgb) / 0.12);
   color: rgb(var(--primary-rgb));
 }
 
-.toolbar__sync-indicator--error {
-  background: rgb(var(--danger-rgb) / 0.14);
-  color: var(--danger);
-}
-
-.toolbar__sync-indicator--syncing {
-  background: rgb(var(--accent-rgb) / 0.14);
-  color: var(--accent);
-}
-
-.toolbar__sync-text {
-  font-size: 0.84rem;
-  color: var(--muted);
+.toolbar__sync-indicator i {
+  filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.35));
 }
 
 .toolbar__subrow {
   display: grid;
-  grid-template-columns: minmax(15rem, 1.3fr) repeat(3, minmax(10rem, 0.7fr)) auto;
+  grid-template-columns: minmax(15rem, 1fr);
   gap: 0.75rem;
   align-items: end;
-  padding: 0 0.4rem 0.35rem;
+  padding: 0.55rem 0.72rem 0.62rem;
+  margin: 0 0.12rem;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--bg) 64%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.07),
+    0 10px 28px rgb(0 0 0 / 0.2);
 }
 
 .toolbar__field {
@@ -401,14 +383,19 @@ const menuItems = computed<MenuItem[]>(() => [
 }
 
 .toolbar__field span {
-  color: var(--muted);
+  color: var(--text);
   font-size: 0.74rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  text-shadow:
+    0 0 1px rgb(255 255 255 / 0.55),
+    0 0 10px rgb(255 255 255 / 0.22),
+    0 1px 2px rgb(0 0 0 / 0.75),
+    0 2px 14px rgb(0 0 0 / 0.35);
 }
 
-:deep(.toolbar__database-select) {
-  width: 100%;
+:deep(.toolbar__sources-menu-icon--off) {
+  visibility: hidden;
 }
 
 .toolbar__mobile-targets {
@@ -417,8 +404,11 @@ const menuItems = computed<MenuItem[]>(() => [
   gap: 0.45rem;
 }
 
-.toolbar__mobile-quadrant,
-.toolbar__recycle {
+.toolbar__mobile-targets--full-row {
+  grid-column: 1 / -1;
+}
+
+.toolbar__mobile-quadrant {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -436,14 +426,6 @@ const menuItems = computed<MenuItem[]>(() => [
   background: rgb(var(--primary-rgb) / 0.14);
 }
 
-.toolbar__recycle {
-  justify-self: end;
-}
-
-.toolbar__recycle:disabled {
-  opacity: 0.55;
-}
-
 .toolbar__help {
   display: grid;
   gap: 0.8rem;
@@ -458,27 +440,9 @@ const menuItems = computed<MenuItem[]>(() => [
   padding-left: 1.2rem;
 }
 
-@media (max-width: 1040px) {
-  .toolbar__subrow {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .toolbar__recycle {
-    justify-self: stretch;
-  }
-}
-
 @media (max-width: 720px) {
-  .toolbar__subrow {
-    grid-template-columns: 1fr;
-  }
-
   .toolbar__mobile-targets {
     justify-content: space-between;
-  }
-
-  .toolbar__sync-text {
-    display: none;
   }
 }
 </style>

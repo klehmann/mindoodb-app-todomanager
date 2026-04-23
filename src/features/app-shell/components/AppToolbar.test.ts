@@ -23,17 +23,6 @@ const MenubarStub = defineComponent({
   `,
 });
 
-const MultiSelectStub = defineComponent({
-  props: {
-    modelValue: {
-      type: Array,
-      required: false,
-      default: () => [],
-    },
-  },
-  template: `<div class="multiselect-stub">{{ modelValue.join(",") }}</div>`,
-});
-
 const DialogStub = defineComponent({
   template: `<div class="dialog-stub"><slot /></div>`,
 });
@@ -48,7 +37,7 @@ function createAppStub() {
     filterMode: ref<TodoFilterMode>("open"),
     sortMode: ref<TodoSortMode>("updated-desc"),
     selectedDatabaseIds: ref(["main"]),
-    databases: ref([{ id: "main", title: "Main" }]),
+    databases: ref([{ id: "main", title: "Main", capabilities: ["read", "create"] }]),
     canCreateAny: ref(true),
     canUpdateSelected: ref(true),
     canDeleteSelected: ref(true),
@@ -79,7 +68,6 @@ describe("AppToolbar", () => {
       global: {
         stubs: {
           Menubar: MenubarStub,
-          MultiSelect: MultiSelectStub,
           Dialog: DialogStub,
         },
       },
@@ -88,7 +76,7 @@ describe("AppToolbar", () => {
     expect(wrapper.find("header").classes()).toContain("toolbar--ios-multitasking");
   });
 
-  it("updates the sync indicator across idle, syncing, and error states", async () => {
+  it("shows the sync spinner only while syncing (Vega-style)", async () => {
     const app = createAppStub();
     const wrapper = mount(AppToolbar, {
       props: {
@@ -97,23 +85,27 @@ describe("AppToolbar", () => {
       global: {
         stubs: {
           Menubar: MenubarStub,
-          MultiSelect: MultiSelectStub,
           Dialog: DialogStub,
         },
       },
     });
 
-    expect(wrapper.find(".toolbar__sync-indicator").text()).toContain("Every 30 seconds");
+    expect(wrapper.find(".toolbar__sync-indicator").exists()).toBe(false);
 
     app.syncState.value = "syncing";
     await nextTick();
-    expect(wrapper.find(".toolbar__sync-indicator").text()).toContain("Syncing");
-    expect(wrapper.find(".toolbar__sync-indicator").classes()).toContain("toolbar__sync-indicator--syncing");
+    const indicator = wrapper.find(".toolbar__sync-indicator");
+    expect(indicator.exists()).toBe(true);
+    expect(indicator.attributes("aria-label")).toBe("Refreshing");
+    expect(indicator.find("i.pi-sync.pi-spin").exists()).toBe(true);
 
     app.syncState.value = "error";
     app.syncError.value = "Sync failed";
     await nextTick();
-    expect(wrapper.find(".toolbar__sync-indicator").text()).toContain("Sync failed");
-    expect(wrapper.find(".toolbar__sync-indicator").classes()).toContain("toolbar__sync-indicator--error");
+    expect(wrapper.find(".toolbar__sync-indicator").exists()).toBe(false);
+
+    app.syncState.value = "idle";
+    await nextTick();
+    expect(wrapper.find(".toolbar__sync-indicator").exists()).toBe(false);
   });
 });

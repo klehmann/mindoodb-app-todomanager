@@ -80,6 +80,71 @@ describe("useTodos", () => {
     unmount();
   });
 
+  it("searches subject, assignedTo, and description through the Flexsearch index", async () => {
+    const mainDatabase = createDatabaseStub([
+      {
+        id: "todo-1",
+        data: {
+          subject: "Alpha roadmap",
+          assignedTo: "Alice Example",
+          description: "Prepare the quarterly planning board",
+          quadrant: 2,
+          completed: false,
+          createdAt: "2026-04-20T00:00:00.000Z",
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ]);
+    const secondaryDatabase = createDatabaseStub([
+      {
+        id: "todo-2",
+        data: {
+          subject: "Beta release",
+          assignedTo: "Bob Example",
+          description: "Done and ready to archive",
+          quadrant: 4,
+          completed: true,
+          createdAt: "2026-04-19T00:00:00.000Z",
+          updatedAt: "2026-04-19T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-19T00:00:00.000Z",
+      },
+    ]);
+    const databases = {
+      main: mainDatabase,
+      secondary: secondaryDatabase,
+    };
+    const { result, unmount } = withSetup(() => useTodos({
+      selectedDatabaseIds: ref(["main", "secondary"]),
+      databases: ref([
+        { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete"] },
+        { id: "secondary", title: "Secondary", capabilities: ["read", "create", "update", "delete"] },
+      ] as any),
+      preferredDatabaseId: computed(() => "main"),
+      getDatabase: vi.fn(async (databaseId: string) => databases[databaseId as keyof typeof databases] as any),
+      loading: ref(false),
+      busyAction: ref<string | null>(null),
+      error: ref<string | null>(null),
+      setSuccess: vi.fn(),
+    }));
+
+    await result.refreshTodos();
+    result.filterMode.value = "all";
+
+    result.searchQuery.value = "Alpha";
+    expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Alpha roadmap"]);
+
+    result.searchQuery.value = "Alice";
+    expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Alpha roadmap"]);
+
+    result.searchQuery.value = "archive";
+    expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Beta release"]);
+    expect(result.todosByQuadrant.value[4]).toHaveLength(1);
+
+    unmount();
+  });
+
   it("supports selection-driven drag, bulk moves, and bulk deletes", async () => {
     const mainDatabase = createDatabaseStub([
       {

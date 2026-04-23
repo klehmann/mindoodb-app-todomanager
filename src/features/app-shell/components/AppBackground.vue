@@ -17,24 +17,6 @@ const BACKGROUNDS = [
   alpineNightStars,
 ] as const;
 
-/**
- * Heuristic: typical luminance of the *bottom* of each scene (where the quote bar sits).
- * CSS cannot sample pixels behind a frosted panel, so we drive contrast from the active slide.
- * `on-dark` → use light text; `on-bright` → use dark text.
- */
-const FOOTER_QUOTE_CONTRAST: Array<"on-dark" | "on-bright"> = [
-  "on-bright",
-  "on-dark",
-  "on-dark",
-  "on-dark",
-  "on-dark",
-  "on-dark",
-];
-
-const emit = defineEmits<{
-  footerQuoteContrast: [value: "on-dark" | "on-bright"];
-}>();
-
 const ROTATE_MS = 120_000;
 
 const url0 = ref("");
@@ -44,16 +26,11 @@ let imageIndex = 0;
 let timer: number | undefined;
 const n = BACKGROUNDS.length;
 
-function emitFooterQuoteContrast() {
-  emit("footerQuoteContrast", FOOTER_QUOTE_CONTRAST[imageIndex] ?? "on-dark");
-}
-
 function seedLayers() {
   imageIndex = Math.floor(Math.random() * n);
   url0.value = BACKGROUNDS[imageIndex];
   url1.value = BACKGROUNDS[(imageIndex + 1) % n];
   topSlot.value = 0;
-  emitFooterQuoteContrast();
 }
 
 function advance() {
@@ -73,8 +50,6 @@ function advance() {
   } else {
     url1.value = BACKGROUNDS[preloadIndex];
   }
-
-  emitFooterQuoteContrast();
 }
 
 onMounted(() => {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { onMounted, watch } from "vue";
 import Message from "primevue/message";
 import ProgressSpinner from "primevue/progressspinner";
 import Toast from "primevue/toast";
 import { useToast } from "primevue/usetoast";
 
+import recyclePaperBasket from "@/assets/recycle-paper-basket.png";
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
 import AppBackground from "@/features/app-shell/components/AppBackground.vue";
 import AppToolbar from "@/features/app-shell/components/AppToolbar.vue";
@@ -14,9 +15,6 @@ import TodoDialog from "@/features/todos/components/TodoDialog.vue";
 
 const app = useTodoManagerApp();
 const toast = useToast();
-
-/** See AppBackground: per-slide heuristic for quote legibility on the frosted footer. */
-const footerQuoteContrast = ref<"on-dark" | "on-bright">("on-dark");
 
 watch(
   () => app.error.value,
@@ -55,13 +53,20 @@ watch(
 onMounted(() => {
   void app.connect();
 });
+
+async function handleFooterRecycleClick() {
+  await app.deleteSelectedTodos();
+}
+
+async function handleFooterRecycleDrop(event: DragEvent) {
+  event.preventDefault();
+  await app.deleteTodos(app.draggedTodoIds.value);
+  app.endDrag();
+}
 </script>
 
 <template>
-  <AppBackground
-    v-if="app.databases.value.length"
-    @footer-quote-contrast="footerQuoteContrast = $event"
-  />
+  <AppBackground v-if="app.databases.value.length" />
   <main class="app-shell">
     <Toast group="todo-bottom" position="bottom-center" />
     <AppToolbar
@@ -107,9 +112,30 @@ onMounted(() => {
     <footer
       v-if="app.databases.value.length"
       class="footer-bar glass-card glass-card--frost"
-      :class="`footer-bar--quote-${footerQuoteContrast}`"
     >
-      <span>Work from 1 to 4. Do the <em>ugliest</em> thing first. :-)</span>
+      <div class="footer-bar__main">
+        <span class="footer-bar__text">
+          Work from 1 to 4. Do the <em>ugliest</em> thing first. :-)
+        </span>
+      </div>
+      <button
+        type="button"
+        class="footer-bar__recycle"
+        :disabled="!app.selectedCount.value && !app.draggedTodoIds.value.length"
+        aria-label="Recycle bin — delete selected todos"
+        title="Delete selected (or drop todos here)"
+        @click="handleFooterRecycleClick"
+        @dragover.prevent
+        @drop="handleFooterRecycleDrop"
+      >
+        <img
+          class="footer-bar__recycle-img"
+          :src="recyclePaperBasket"
+          width="256"
+          height="256"
+          alt=""
+        />
+      </button>
     </footer>
 
     <TodoDialog :app="app" />
@@ -152,33 +178,77 @@ onMounted(() => {
   bottom: 2px;
   z-index: 10;
   display: flex;
-  justify-content: center;
-  padding: 0.5rem 0.9rem;
-  border-radius: 0;
-  color: var(--muted);
-  text-align: center;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding: 0.42rem 0.55rem 0.42rem 0.75rem;
+  border-radius: 0.85rem;
+  text-align: start;
 }
 
-.footer-bar em {
+/* Same tint chip + dual halo as the former quote-only panel; covers the whole footer bar. */
+.footer-bar.glass-card--frost {
+  background: color-mix(in srgb, var(--bg) 64%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.07),
+    0 10px 28px rgb(0 0 0 / 0.2);
+}
+
+.footer-bar__main {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.footer-bar__text {
+  display: inline-block;
+  max-width: min(56rem, 96vw);
+  padding: 0.12rem 0.35rem;
+  text-align: start;
+  color: var(--text);
+  text-shadow:
+    0 0 1px rgb(255 255 255 / 0.55),
+    0 0 10px rgb(255 255 255 / 0.22),
+    0 1px 2px rgb(0 0 0 / 0.75),
+    0 2px 14px rgb(0 0 0 / 0.35);
+}
+
+.footer-bar__text em {
   font-style: italic;
+  color: inherit;
 }
 
-/* Chosen from AppBackground slide – light copy on dim scenes, dark copy on bright ground/sky. */
-.footer-bar--quote-on-dark {
-  color: rgba(236, 240, 255, 0.9);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+.footer-bar__recycle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  /* Explicit square: avoid align-self:stretch + aspect-ratio flex sizing bugs (viewport-tall button). */
+  width: 2.85rem;
+  height: 2.85rem;
+  padding: 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--bg) 42%, transparent);
+  cursor: pointer;
 }
 
-.footer-bar--quote-on-dark em {
-  color: rgba(255, 255, 255, 0.95);
+.footer-bar__recycle-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+  pointer-events: none;
 }
 
-.footer-bar--quote-on-bright {
-  color: rgba(16, 24, 42, 0.9);
-  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.25);
-}
-
-.footer-bar--quote-on-bright em {
-  color: rgba(10, 16, 32, 0.95);
+.footer-bar__recycle:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 </style>

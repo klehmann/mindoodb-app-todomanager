@@ -260,7 +260,7 @@ describe("TodoQuadrant", () => {
       },
     });
 
-    await wrapper.find(".quadrant__empty").trigger("dblclick");
+    await wrapper.find("section.quadrant").trigger("dblclick");
 
     expect(app.startCreateTodo).toHaveBeenCalledWith(2);
   });

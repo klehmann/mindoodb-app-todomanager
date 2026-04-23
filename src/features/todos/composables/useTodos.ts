@@ -1,3 +1,4 @@
+import { Document } from "flexsearch";
 import { computed, ref, type ComputedRef, type Ref } from "vue";
 import {
   canPreviewAttachment,
@@ -59,6 +60,29 @@ function formatAttachmentSize(size: number) {
   return `${value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unitIndex]}`;
 }
 
+type TodoSearchDocument = {
+  selectionKey: string;
+  subject: string;
+  assignedTo: string;
+  description: string;
+};
+
+function createTodoSearchIndex() {
+  return new Document<TodoSearchDocument>({
+    id: "selectionKey",
+    index: ["subject", "assignedTo", "description"],
+  });
+}
+
+function addTodoToSearchIndex(index: Document<TodoSearchDocument>, todo: TodoItem) {
+  index.add({
+    selectionKey: todo.selectionKey,
+    subject: todo.subject,
+    assignedTo: todo.assignedTo,
+    description: todo.description,
+  });
+}
+
 export interface UseTodosOptions {
   selectedDatabaseIds: Ref<string[]>;
   databases: Ref<MindooDBAppDatabaseInfo[]>;
@@ -72,6 +96,7 @@ export interface UseTodosOptions {
 
 export function useTodos(options: UseTodosOptions) {
   const todos = ref<TodoItem[]>([]);
+  const todoSearchIndex = ref<Document<TodoSearchDocument> | null>(null);
   const selectedTodoIds = ref<string[]>([]);
   const draggedTodoIds = ref<string[]>([]);
   const dialogVisible = ref(false);
@@ -140,8 +165,8 @@ export function useTodos(options: UseTodosOptions) {
   );
 
   const filteredTodos = computed(() => {
-    const query = searchQuery.value.trim().toLocaleLowerCase();
-    const filtered = todos.value.filter((todo) => {
+    const query = searchQuery.value.trim();
+    let filtered = todos.value.filter((todo) => {
       if (filterMode.value === "open" && todo.completed) {
         return false;
       }
@@ -151,9 +176,17 @@ export function useTodos(options: UseTodosOptions) {
       if (!query) {
         return true;
       }
-
-      return `${todo.subject}\n${todo.description}`.toLocaleLowerCase().includes(query);
+      return true;
     });
+
+    if (query) {
+      const searchResults = todoSearchIndex.value?.search(query, {
+        merge: true,
+        limit: Math.max(todos.value.length, 1),
+      }) ?? [];
+      const matchingTodoIds = new Set(searchResults.map((result) => String(result.id)));
+      filtered = filtered.filter((todo) => matchingTodoIds.has(todo.selectionKey));
+    }
 
     filtered.sort((left, right) => {
       switch (sortMode.value) {
@@ -285,7 +318,7 @@ export function useTodos(options: UseTodosOptions) {
     };
   }
 
-  async function listDatabaseTodos(databaseId: string) {
+  async function listDatabaseTodos(databaseId: string, searchIndex: Document<TodoSearchDocument>) {
     const databaseInfo = databaseInfoById.value[databaseId];
     if (!databaseInfo?.capabilities.includes("read")) {
       return [];
@@ -306,7 +339,11 @@ export function useTodos(options: UseTodosOptions) {
         status: "existing",
       });
 
-      items.push(...page.items.map((item) => readTodoItem(item, databaseId)));
+      items.push(...page.items.map((item) => {
+        const todo = readTodoItem(item, databaseId);
+        addTodoToSearchIndex(searchIndex, todo);
+        return todo;
+      }));
       if (!page.nextCursor || page.nextCursor === cursor) {
         break;
       }
@@ -323,12 +360,15 @@ export function useTodos(options: UseTodosOptions) {
 
     if (!readableDatabaseIds.length) {
       todos.value = [];
+      todoSearchIndex.value = null;
       clearSelection();
       return;
     }
 
-    const groups = await Promise.all(readableDatabaseIds.map(async (databaseId) => await listDatabaseTodos(databaseId)));
+    const searchIndex = createTodoSearchIndex();
+    const groups = await Promise.all(readableDatabaseIds.map(async (databaseId) => await listDatabaseTodos(databaseId, searchIndex)));
     todos.value = groups.flat();
+    todoSearchIndex.value = searchIndex;
     setSelectedTodoIds(selectedTodoIds.value);
     if (dialogTodoId.value) {
       applyDialogAttachmentsFromTodoList(dialogTodoId.value);

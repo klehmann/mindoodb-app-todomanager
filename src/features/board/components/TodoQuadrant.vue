@@ -410,28 +410,20 @@ onBeforeUnmount(() => {
     @pointerup="handleBackgroundPointerUp"
   >
     <header class="quadrant__header">
-      <div>
-        <p class="panel__eyebrow">
+      <div class="quadrant__titles">
+        <p class="panel__eyebrow quadrant__titles-eyebrow">
           {{ definition.subtitle }}
         </p>
-        <h2>{{ definition.title }}</h2>
+        <h2 class="quadrant__titles-heading">
+          {{ definition.title }}
+        </h2>
       </div>
       <div class="quadrant__badge">
         {{ definition.quadrant }}
       </div>
     </header>
 
-    <div
-      v-if="!todos.length"
-      class="quadrant__empty"
-    >
-      No todos here.
-    </div>
-
-    <div
-      v-else
-      class="quadrant__list"
-    >
+    <div class="quadrant__list">
       <article
         v-for="todo in todos"
         :key="todo.selectionKey"
@@ -538,9 +530,38 @@ onBeforeUnmount(() => {
   gap: 0.75rem;
 }
 
-.quadrant__header h2 {
-  margin: 0.15rem 0 0;
+.quadrant__titles {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+  padding: 0.42rem 0.72rem;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--bg) 64%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.07),
+    0 10px 28px rgb(0 0 0 / 0.2);
+}
+
+.quadrant__titles-eyebrow {
+  margin: 0;
+}
+
+.quadrant__titles-heading {
+  margin: 0;
   font-size: 1.08rem;
+  line-height: 1.22;
+}
+
+/* Dual-direction halo: readable on bright foliage or dark sky behind the glass. */
+.quadrant__titles-eyebrow,
+.quadrant__titles-heading {
+  color: var(--text);
+  text-shadow:
+    0 0 1px rgb(255 255 255 / 0.55),
+    0 0 10px rgb(255 255 255 / 0.22),
+    0 1px 2px rgb(0 0 0 / 0.75),
+    0 2px 14px rgb(0 0 0 / 0.35);
 }
 
 .quadrant__badge {
@@ -550,21 +571,14 @@ onBeforeUnmount(() => {
   width: 2.3rem;
   height: 2.3rem;
   border-radius: 999px;
-  background: rgb(var(--primary-rgb) / 0.12);
+  background: color-mix(in srgb, rgb(var(--primary-rgb)) 22%, var(--bg));
+  border: 1px solid rgb(255 255 255 / 0.12);
   color: rgb(var(--primary-rgb));
   font-weight: 700;
-}
-
-.quadrant__empty {
-  display: grid;
-  place-items: center;
-  min-height: 10rem;
-  color: var(--muted);
-  border: 1px dashed var(--border);
-  border-radius: 1rem;
-  background: var(--bg-glass);
-  backdrop-filter: var(--glass-backdrop);
-  -webkit-backdrop-filter: var(--glass-backdrop);
+  text-shadow:
+    0 0 1px rgb(255 255 255 / 0.35),
+    0 1px 2px rgb(0 0 0 / 0.55);
+  box-shadow: 0 2px 12px rgb(0 0 0 / 0.18);
 }
 
 .quadrant__list {
