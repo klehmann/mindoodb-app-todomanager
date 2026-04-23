@@ -56,50 +56,15 @@ function formatDateRange(startAt: string | null, dueAt: string | null) {
   return startLabel ?? dueLabel;
 }
 
-function createGhostImage(count: number, subject: string) {
-  const node = document.createElement("div");
-  node.style.position = "fixed";
-  node.style.top = "-1000px";
-  node.style.left = "-1000px";
-  node.style.padding = "0.75rem 1rem";
-  node.style.borderRadius = "16px";
-  node.style.background = "rgba(12, 18, 34, 0.92)";
-  node.style.border = "1px solid rgba(212, 160, 23, 0.34)";
-  node.style.color = "#eef2ff";
-  node.style.font = "600 14px Inter, system-ui, sans-serif";
-  node.style.boxShadow = "0 18px 38px rgba(1, 5, 16, 0.35)";
-  node.textContent = count > 1 ? `${count} todos` : subject;
-  document.body.appendChild(node);
-  requestAnimationFrame(() => {
-    node.remove();
-  });
-  return node;
-}
-
 function handleCardClick(todoId: string, event: MouseEvent) {
+  if (props.app.shouldSuppressTodoCardClick?.()) {
+    return;
+  }
   props.app.selectTodo(todoId, event.metaKey || event.ctrlKey);
 }
 
 function handleCheckboxClick(todoId: string) {
   props.app.selectTodo(todoId, true);
-}
-
-function handleDragStart(todo: TodoItem, event: DragEvent) {
-  const ids = props.app.beginDrag(todo.selectionKey);
-  if (!event.dataTransfer) {
-    return;
-  }
-
-  event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData("text/plain", JSON.stringify(ids));
-  event.dataTransfer.setData("application/x-mindoodb-todos", JSON.stringify(ids));
-  event.dataTransfer.setDragImage(createGhostImage(ids.length, todo.subject), 18, 18);
-}
-
-async function handleDrop(event: DragEvent) {
-  event.preventDefault();
-  await props.app.moveTodos(props.app.draggedTodoIds.value, props.definition.quadrant);
-  props.app.endDrag();
 }
 
 function dataTransferHasFiles(event: DragEvent): boolean {
@@ -402,9 +367,12 @@ onBeforeUnmount(() => {
 <template>
   <section
     class="quadrant glass-card glass-card--frost"
-    :class="{ 'quadrant--compact': compact }"
-    @dragover.prevent
-    @drop="handleDrop"
+    :class="{
+      'quadrant--compact': compact,
+      'quadrant--drop-target': props.app.todoPointerDragState.hoverQuadrant === props.definition.quadrant
+        && props.app.todoPointerDragState.active,
+    }"
+    :data-todo-quadrant="definition.quadrant"
     @dblclick="handleBackgroundDoubleClick"
     @pointerdown.capture="dismissContextMenu"
     @pointerup="handleBackgroundPointerUp"
@@ -434,22 +402,21 @@ onBeforeUnmount(() => {
           'todo-card--dragging': props.app.draggedTodoIds.value.includes(todo.selectionKey),
           'todo-card--file-drop-target': fileDropTargetTodoKey === todo.selectionKey,
         }"
-        draggable="true"
         @click="handleCardClick(todo.selectionKey, $event)"
         @dblclick="props.app.openTodo(todo.selectionKey)"
         @contextmenu.stop="handleTodoContextMenu(todo, $event)"
+        @pointerdown="props.app.handleTodoPointerDown(todo.selectionKey, $event)"
         @dragenter="handleTodoFileDragEnter(todo, $event)"
         @dragover="handleTodoFileDragOver(todo, $event)"
         @dragleave="handleTodoFileDragLeave(todo, $event)"
         @drop="handleTodoFileDrop(todo, $event)"
-        @dragstart="handleDragStart(todo, $event)"
-        @dragend="props.app.endDrag()"
       >
         <div class="todo-card__check">
           <input
             :checked="props.app.isSelected(todo.selectionKey)"
             type="checkbox"
             aria-label="Select todo"
+            @pointerdown.stop
             @click.stop="handleCheckboxClick(todo.selectionKey)"
           />
         </div>
@@ -496,7 +463,6 @@ onBeforeUnmount(() => {
               <i class="pi pi-calendar" aria-hidden="true" />
               <span>{{ formatDateRange(todo.startAt, todo.dueAt) }}</span>
             </span>
-            <span v-if="formatDate(todo.updatedAt)">Updated {{ formatDate(todo.updatedAt) }}</span>
           </div>
         </div>
       </article>
@@ -517,6 +483,18 @@ onBeforeUnmount(() => {
   gap: 0.9rem;
   min-height: 0;
   padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    0 10px 28px rgb(0 0 0 / 0.16);
+}
+
+.quadrant--drop-target {
+  border-color: rgb(var(--primary-rgb) / 0.78);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--primary-rgb) / 0.4),
+    0 0 0 1px rgb(var(--primary-rgb) / 0.24),
+    0 14px 34px rgb(0 0 0 / 0.2);
 }
 
 .quadrant--compact {
@@ -558,10 +536,9 @@ onBeforeUnmount(() => {
 .quadrant__titles-heading {
   color: var(--text);
   text-shadow:
-    0 0 1px rgb(255 255 255 / 0.55),
-    0 0 10px rgb(255 255 255 / 0.22),
-    0 1px 2px rgb(0 0 0 / 0.75),
-    0 2px 14px rgb(0 0 0 / 0.35);
+    0 0 1px rgb(255 255 255 / 0.3),
+    0 1px 1px rgb(0 0 0 / 0.48),
+    0 1px 6px rgb(0 0 0 / 0.18);
 }
 
 .quadrant__badge {
@@ -599,6 +576,8 @@ onBeforeUnmount(() => {
   /* Opaque surface so titles/meta stay sharp; shell stays frosted. */
   background: var(--bg-elevated);
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
   transition:
     transform 160ms ease,
     border-color 160ms ease,

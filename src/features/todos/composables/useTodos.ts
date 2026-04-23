@@ -1,5 +1,5 @@
 import { Document } from "flexsearch";
-import { computed, ref, type ComputedRef, type Ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, type ComputedRef, type Ref } from "vue";
 import {
   canPreviewAttachment,
   type MindooDBAppAttachmentInfo,
@@ -83,6 +83,10 @@ function addTodoToSearchIndex(index: Document<TodoSearchDocument>, todo: TodoIte
   });
 }
 
+const DRAG_START_DISTANCE = 10;
+const LONG_PRESS_DELAY_MS = 240;
+const LONG_PRESS_MOVE_TOLERANCE = 10;
+
 export interface UseTodosOptions {
   selectedDatabaseIds: Ref<string[]>;
   databases: Ref<MindooDBAppDatabaseInfo[]>;
@@ -97,6 +101,22 @@ export interface UseTodosOptions {
 export function useTodos(options: UseTodosOptions) {
   const todos = ref<TodoItem[]>([]);
   const todoSearchIndex = ref<Document<TodoSearchDocument> | null>(null);
+  const todoPointerDragState = reactive({
+    todoId: "",
+    active: false,
+    started: false,
+    pointerId: null as number | null,
+    pointerType: "",
+    startX: 0,
+    startY: 0,
+    x: 0,
+    y: 0,
+    hoverQuadrant: null as TodoQuadrant | null,
+    hoverRecycle: false,
+    longPressArmed: false,
+    longPressArmX: 0,
+    longPressArmY: 0,
+  });
   const selectedTodoIds = ref<string[]>([]);
   const draggedTodoIds = ref<string[]>([]);
   const dialogVisible = ref(false);
@@ -213,6 +233,183 @@ export function useTodos(options: UseTodosOptions) {
   }));
 
   const mobileTodos = computed(() => todosByQuadrant.value[activeMobileQuadrant.value]);
+  const dragPreviewTodo = computed(() => findTodoBySelectionKey(todoPointerDragState.todoId));
+  const dragPreviewStyle = computed(() => ({
+    transform: `translate(${todoPointerDragState.x + 12}px, ${todoPointerDragState.y + 12}px)`,
+  }));
+
+  let todoLongPressTimer: number | null = null;
+  let suppressTodoClickUntil = 0;
+
+  function clearTodoLongPressTimer() {
+    if (todoLongPressTimer !== null) {
+      window.clearTimeout(todoLongPressTimer);
+      todoLongPressTimer = null;
+    }
+  }
+
+  function updateTodoDropTarget(clientX: number, clientY: number) {
+    if (typeof document === "undefined") {
+      todoPointerDragState.hoverQuadrant = null;
+      todoPointerDragState.hoverRecycle = false;
+      return;
+    }
+
+    const target = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+    const recycleTarget = target?.closest("[data-todo-drop-target='recycle']");
+    const quadrantTarget = target?.closest("[data-todo-quadrant]");
+    todoPointerDragState.hoverRecycle = Boolean(recycleTarget);
+    todoPointerDragState.hoverQuadrant = quadrantTarget
+      ? Number(quadrantTarget.getAttribute("data-todo-quadrant")) as TodoQuadrant
+      : null;
+  }
+
+  function resetTodoPointerDrag() {
+    clearTodoLongPressTimer();
+    if (todoPointerDragState.active) {
+      endDrag();
+    }
+    todoPointerDragState.todoId = "";
+    todoPointerDragState.active = false;
+    todoPointerDragState.started = false;
+    todoPointerDragState.pointerId = null;
+    todoPointerDragState.pointerType = "";
+    todoPointerDragState.startX = 0;
+    todoPointerDragState.startY = 0;
+    todoPointerDragState.x = 0;
+    todoPointerDragState.y = 0;
+    todoPointerDragState.hoverQuadrant = null;
+    todoPointerDragState.hoverRecycle = false;
+    todoPointerDragState.longPressArmed = false;
+    todoPointerDragState.longPressArmX = 0;
+    todoPointerDragState.longPressArmY = 0;
+  }
+
+  function startTodoPointerDrag(clientX: number, clientY: number) {
+    if (!todoPointerDragState.todoId || todoPointerDragState.started) {
+      return;
+    }
+    clearTodoLongPressTimer();
+    todoPointerDragState.active = true;
+    todoPointerDragState.started = true;
+    todoPointerDragState.x = clientX;
+    todoPointerDragState.y = clientY;
+    beginDrag(todoPointerDragState.todoId);
+    updateTodoDropTarget(clientX, clientY);
+  }
+
+  function shouldSuppressTodoCardClick() {
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    return now < suppressTodoClickUntil;
+  }
+
+  function handleTodoPointerDown(todoId: string, event: PointerEvent) {
+    if (event.button === 2) {
+      return;
+    }
+
+    todoPointerDragState.todoId = todoId;
+    todoPointerDragState.pointerId = event.pointerId;
+    todoPointerDragState.pointerType = event.pointerType;
+    todoPointerDragState.startX = event.clientX;
+    todoPointerDragState.startY = event.clientY;
+    todoPointerDragState.x = event.clientX;
+    todoPointerDragState.y = event.clientY;
+    todoPointerDragState.hoverQuadrant = null;
+    todoPointerDragState.hoverRecycle = false;
+    todoPointerDragState.longPressArmed = false;
+
+    if (event.pointerType === "touch") {
+      clearTodoLongPressTimer();
+      todoLongPressTimer = window.setTimeout(() => {
+        if (!todoPointerDragState.todoId || todoPointerDragState.todoId !== todoId || todoPointerDragState.started) {
+          return;
+        }
+        todoPointerDragState.longPressArmed = true;
+        todoPointerDragState.longPressArmX = todoPointerDragState.x;
+        todoPointerDragState.longPressArmY = todoPointerDragState.y;
+        todoLongPressTimer = null;
+      }, LONG_PRESS_DELAY_MS);
+    }
+  }
+
+  function handleTodoPointerMove(event: PointerEvent) {
+    if (todoPointerDragState.pointerId !== event.pointerId || !todoPointerDragState.todoId) {
+      return;
+    }
+
+    todoPointerDragState.x = event.clientX;
+    todoPointerDragState.y = event.clientY;
+
+    if (!todoPointerDragState.started && todoPointerDragState.pointerType !== "touch") {
+      const distance = Math.hypot(
+        event.clientX - todoPointerDragState.startX,
+        event.clientY - todoPointerDragState.startY,
+      );
+      if (distance >= DRAG_START_DISTANCE) {
+        startTodoPointerDrag(event.clientX, event.clientY);
+      }
+      return;
+    }
+
+    if (!todoPointerDragState.started && todoPointerDragState.pointerType === "touch") {
+      if (!todoPointerDragState.longPressArmed) {
+        if (Math.hypot(
+          event.clientX - todoPointerDragState.startX,
+          event.clientY - todoPointerDragState.startY,
+        ) > LONG_PRESS_MOVE_TOLERANCE) {
+          clearTodoLongPressTimer();
+        }
+        return;
+      }
+
+      const armedDistance = Math.hypot(
+        event.clientX - todoPointerDragState.longPressArmX,
+        event.clientY - todoPointerDragState.longPressArmY,
+      );
+      if (armedDistance >= DRAG_START_DISTANCE) {
+        startTodoPointerDrag(event.clientX, event.clientY);
+      }
+      return;
+    }
+
+    if (todoPointerDragState.active) {
+      updateTodoDropTarget(event.clientX, event.clientY);
+    }
+  }
+
+  async function handleTodoPointerUp(event: PointerEvent) {
+    if (todoPointerDragState.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const hoveredQuadrant = todoPointerDragState.hoverQuadrant;
+    const hoveredRecycle = todoPointerDragState.hoverRecycle;
+    const draggedIds = [...draggedTodoIds.value];
+    const shouldDelete = todoPointerDragState.active && hoveredRecycle && draggedIds.length > 0;
+    const shouldMove = todoPointerDragState.active
+      && Boolean(hoveredQuadrant)
+      && draggedIds.some((todoId) => findTodoBySelectionKey(todoId)?.quadrant !== hoveredQuadrant);
+
+    if (todoPointerDragState.active || todoPointerDragState.started) {
+      suppressTodoClickUntil = typeof performance !== "undefined" ? performance.now() + 250 : Date.now() + 250;
+    }
+
+    resetTodoPointerDrag();
+
+    if (shouldDelete) {
+      await deleteTodos(draggedIds);
+      return;
+    }
+
+    if (shouldMove && hoveredQuadrant) {
+      await moveTodos(draggedIds, hoveredQuadrant);
+    }
+  }
+
+  function handleTodoPointerCancel() {
+    resetTodoPointerDrag();
+  }
 
   function setSelectedTodoIds(ids: string[]) {
     selectedTodoIds.value = Array.from(new Set(ids)).filter((id) =>
@@ -800,6 +997,19 @@ export function useTodos(options: UseTodosOptions) {
     draggedTodoIds.value = [];
   }
 
+  onMounted(() => {
+    document.addEventListener("pointermove", handleTodoPointerMove);
+    document.addEventListener("pointerup", handleTodoPointerUp);
+    document.addEventListener("pointercancel", handleTodoPointerCancel);
+  });
+
+  onBeforeUnmount(() => {
+    document.removeEventListener("pointermove", handleTodoPointerMove);
+    document.removeEventListener("pointerup", handleTodoPointerUp);
+    document.removeEventListener("pointercancel", handleTodoPointerCancel);
+    clearTodoLongPressTimer();
+  });
+
   return {
     todos,
     selectedTodoIds,
@@ -822,6 +1032,9 @@ export function useTodos(options: UseTodosOptions) {
     filterMode,
     sortMode,
     activeMobileQuadrant,
+    todoPointerDragState,
+    dragPreviewTodo,
+    dragPreviewStyle,
     createTargetDatabases,
     canCreateAny,
     canUpdateSelected,
@@ -859,5 +1072,7 @@ export function useTodos(options: UseTodosOptions) {
     getTodoAttachmentTooltip,
     beginDrag,
     endDrag,
+    handleTodoPointerDown,
+    shouldSuppressTodoCardClick,
   };
 }

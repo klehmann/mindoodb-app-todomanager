@@ -12,6 +12,7 @@ const props = defineProps<{
 }>();
 
 const helpDialogVisible = ref(false);
+const searchPanelVisible = ref(false);
 
 const refreshModeLabels: Record<TodoSyncMode, string> = {
   off: "Sync off",
@@ -66,6 +67,10 @@ async function toggleSourceDatabase(databaseId: string) {
     return;
   }
   await props.app.selectDatabases([...ids, databaseId]);
+}
+
+function toggleSearchPanel() {
+  searchPanelVisible.value = !searchPanelVisible.value;
 }
 
 const menuItems = computed<MenuItem[]>(() => [
@@ -171,6 +176,13 @@ const menuItems = computed<MenuItem[]>(() => [
           },
         })),
       },
+      {
+        label: "Show search",
+        icon: searchPanelVisible.value ? "pi pi-check" : sourcesMenuIconOff,
+        command: () => {
+          toggleSearchPanel();
+        },
+      },
       { separator: true },
       ...props.app.databases.value.map((database) => {
         const canRead = database.capabilities.includes("read");
@@ -230,35 +242,45 @@ const menuItems = computed<MenuItem[]>(() => [
       </Menubar>
     </div>
 
-    <div class="toolbar__subrow">
-      <label class="toolbar__field toolbar__search">
-        <span>Search</span>
-        <input
-          :value="props.app.searchQuery.value"
-          type="search"
-          class="native-input"
-          placeholder="Filter todos..."
-          @input="props.app.searchQuery.value = ($event.target as HTMLInputElement).value"
-        />
-      </label>
-
+    <Transition name="toolbar-search-panel">
       <div
-        v-if="props.app.isCompactViewport.value"
-        class="toolbar__mobile-targets toolbar__mobile-targets--full-row"
+        v-if="searchPanelVisible"
+        class="toolbar__subrow"
       >
-        <button
-          v-for="entry in TODO_QUADRANTS"
-          :key="entry.quadrant"
-          type="button"
-          class="toolbar__mobile-quadrant"
-          :class="{ 'toolbar__mobile-quadrant--active': props.app.activeMobileQuadrant.value === entry.quadrant }"
-          @click="props.app.setMobileQuadrant(entry.quadrant)"
-          @dragover.prevent
-          @drop="handleQuadrantDrop(entry.quadrant, $event)"
-        >
-          {{ entry.quadrant }}
-        </button>
+        <label class="toolbar__field toolbar__search">
+          <span>Search</span>
+          <input
+            :value="props.app.searchQuery.value"
+            type="search"
+            class="native-input"
+            placeholder="Filter todos..."
+            @input="props.app.searchQuery.value = ($event.target as HTMLInputElement).value"
+          />
+        </label>
       </div>
+    </Transition>
+
+    <div
+      v-if="props.app.isCompactViewport.value"
+      class="toolbar__mobile-targets"
+    >
+      <button
+        v-for="entry in TODO_QUADRANTS"
+        :key="entry.quadrant"
+        type="button"
+        class="toolbar__mobile-quadrant"
+        :class="{
+          'toolbar__mobile-quadrant--active': props.app.activeMobileQuadrant.value === entry.quadrant,
+          'toolbar__mobile-quadrant--drag-hover': props.app.todoPointerDragState.hoverQuadrant === entry.quadrant
+            && props.app.todoPointerDragState.active,
+        }"
+        :data-todo-quadrant="entry.quadrant"
+        @click="props.app.setMobileQuadrant(entry.quadrant)"
+        @dragover.prevent
+        @drop="handleQuadrantDrop(entry.quadrant, $event)"
+      >
+        {{ entry.quadrant }}
+      </button>
     </div>
   </header>
 
@@ -281,8 +303,8 @@ const menuItems = computed<MenuItem[]>(() => [
         <li><strong>4:</strong> Not important and not due soon</li>
       </ul>
       <p>
-        Use the search field for text and the Sources menu for filter, sort, and which databases to read from.
-        Drag todos between quadrants to re-prioritize them, or drag them to the recycle bin to delete them.
+        Use the Sources menu for filter, sort, showing search, and which databases to read from. Drag todos
+        between quadrants to re-prioritize them, or drag them to the recycle bin to delete them.
       </p>
       <p>
         Double click the background of a quadrant on desktop, or double tap it on touch devices, to create a
@@ -299,7 +321,7 @@ const menuItems = computed<MenuItem[]>(() => [
   z-index: 20;
   display: grid;
   gap: 0.65rem;
-  padding: 0.2rem;
+  padding: 0;
   border-radius: 0.6rem;
   backdrop-filter: blur(26px);
 }
@@ -310,7 +332,6 @@ const menuItems = computed<MenuItem[]>(() => [
 
 .toolbar__menu-row {
   padding: 0.45rem 0.65rem 0.52rem;
-  margin: 0 0.12rem;
   border-radius: 0.85rem;
   background: color-mix(in srgb, var(--bg) 64%, transparent);
   border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
@@ -337,10 +358,9 @@ const menuItems = computed<MenuItem[]>(() => [
 .toolbar__menu-row :deep(.p-menubar-item-icon) {
   color: var(--text);
   text-shadow:
-    0 0 1px rgb(255 255 255 / 0.55),
-    0 0 10px rgb(255 255 255 / 0.22),
-    0 1px 2px rgb(0 0 0 / 0.75),
-    0 2px 14px rgb(0 0 0 / 0.35);
+    0 0 1px rgb(255 255 255 / 0.3),
+    0 1px 1px rgb(0 0 0 / 0.45),
+    0 1px 6px rgb(0 0 0 / 0.16);
 }
 
 .toolbar__menu-row :deep(.p-menubar-item-link) {
@@ -368,13 +388,13 @@ const menuItems = computed<MenuItem[]>(() => [
   gap: 0.75rem;
   align-items: end;
   padding: 0.55rem 0.72rem 0.62rem;
-  margin: 0 0.12rem;
   border-radius: 0.85rem;
   background: color-mix(in srgb, var(--bg) 64%, transparent);
   border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
   box-shadow:
     0 1px 0 rgb(255 255 255 / 0.07),
     0 10px 28px rgb(0 0 0 / 0.2);
+  overflow: hidden;
 }
 
 .toolbar__field {
@@ -402,10 +422,7 @@ const menuItems = computed<MenuItem[]>(() => [
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-}
-
-.toolbar__mobile-targets--full-row {
-  grid-column: 1 / -1;
+  padding: 0.1rem 0.12rem;
 }
 
 .toolbar__mobile-quadrant {
@@ -426,6 +443,12 @@ const menuItems = computed<MenuItem[]>(() => [
   background: rgb(var(--primary-rgb) / 0.14);
 }
 
+.toolbar__mobile-quadrant--drag-hover {
+  border-color: rgb(var(--primary-rgb));
+  background: rgb(var(--primary-rgb) / 0.2);
+  box-shadow: 0 0 0 1px rgb(var(--primary-rgb) / 0.28);
+}
+
 .toolbar__help {
   display: grid;
   gap: 0.8rem;
@@ -438,6 +461,31 @@ const menuItems = computed<MenuItem[]>(() => [
 
 .toolbar__help ul {
   padding-left: 1.2rem;
+}
+
+.toolbar-search-panel-enter-active,
+.toolbar-search-panel-leave-active {
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    max-height 260ms ease,
+    margin 260ms ease;
+}
+
+.toolbar-search-panel-enter-from,
+.toolbar-search-panel-leave-to {
+  opacity: 0;
+  transform: translateY(-0.45rem);
+  max-height: 0;
+  margin-top: -0.25rem;
+}
+
+.toolbar-search-panel-enter-to,
+.toolbar-search-panel-leave-from {
+  opacity: 1;
+  transform: translateY(0);
+  max-height: 7rem;
+  margin-top: 0;
 }
 
 @media (max-width: 720px) {

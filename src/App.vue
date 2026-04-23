@@ -121,6 +121,8 @@ async function handleFooterRecycleDrop(event: DragEvent) {
       <button
         type="button"
         class="footer-bar__recycle"
+        :class="{ 'footer-bar__recycle--drag-hover': app.todoPointerDragState.hoverRecycle && app.todoPointerDragState.active }"
+        data-todo-drop-target="recycle"
         :disabled="!app.selectedCount.value && !app.draggedTodoIds.value.length"
         aria-label="Recycle bin — delete selected todos"
         title="Delete selected (or drop todos here)"
@@ -188,9 +190,12 @@ async function handleFooterRecycleDrop(event: DragEvent) {
 
 /* Same tint chip + dual halo as the former quote-only panel; covers the whole footer bar. */
 .footer-bar.glass-card--frost {
-  background: color-mix(in srgb, var(--bg) 64%, transparent);
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
   border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
   box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
     0 1px 0 rgb(255 255 255 / 0.07),
     0 10px 28px rgb(0 0 0 / 0.2);
 }
@@ -210,10 +215,9 @@ async function handleFooterRecycleDrop(event: DragEvent) {
   text-align: start;
   color: var(--text);
   text-shadow:
-    0 0 1px rgb(255 255 255 / 0.55),
-    0 0 10px rgb(255 255 255 / 0.22),
-    0 1px 2px rgb(0 0 0 / 0.75),
-    0 2px 14px rgb(0 0 0 / 0.35);
+    0 0 1px rgb(255 255 255 / 0.3),
+    0 1px 1px rgb(0 0 0 / 0.48),
+    0 1px 6px rgb(0 0 0 / 0.18);
 }
 
 .footer-bar__text em {
@@ -231,10 +235,11 @@ async function handleFooterRecycleDrop(event: DragEvent) {
   width: 2.85rem;
   height: 2.85rem;
   padding: 0.2rem;
-  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
-  border-radius: 0.65rem;
-  background: color-mix(in srgb, var(--bg) 42%, transparent);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   cursor: pointer;
+  transition: transform 160ms ease, filter 160ms ease, opacity 160ms ease;
 }
 
 .footer-bar__recycle-img {
@@ -245,6 +250,11 @@ async function handleFooterRecycleDrop(event: DragEvent) {
   object-fit: contain;
   user-select: none;
   pointer-events: none;
+}
+
+.footer-bar__recycle--drag-hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 8px 20px rgb(var(--primary-rgb) / 0.28));
 }
 
 .footer-bar__recycle:disabled {

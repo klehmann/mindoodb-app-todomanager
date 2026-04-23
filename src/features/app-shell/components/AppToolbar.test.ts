@@ -1,5 +1,5 @@
 import { mount } from "@vue/test-utils";
-import { defineComponent, nextTick, ref } from "vue";
+import { defineComponent, nextTick, reactive, ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
 import type { TodoFilterMode, TodoSortMode, TodoSyncMode } from "@/features/todos/composables/todoTypes";
@@ -27,6 +27,10 @@ const DialogStub = defineComponent({
   template: `<div class="dialog-stub"><slot /></div>`,
 });
 
+const TransitionStub = defineComponent({
+  template: `<div><slot /></div>`,
+});
+
 function createAppStub() {
   return {
     hostUiPreferences: ref({ iosMultitaskingOptimized: true }),
@@ -47,6 +51,10 @@ function createAppStub() {
     activeMobileQuadrant: ref(1),
     isCompactViewport: ref(false),
     draggedTodoIds: ref<string[]>([]),
+    todoPointerDragState: reactive({
+      hoverQuadrant: null as number | null,
+      active: false,
+    }),
     startCreateTodo: vi.fn(),
     refreshNow: vi.fn().mockResolvedValue(true),
     moveSelectedTodos: vi.fn().mockResolvedValue(undefined),
@@ -107,5 +115,38 @@ describe("AppToolbar", () => {
     app.syncState.value = "idle";
     await nextTick();
     expect(wrapper.find(".toolbar__sync-indicator").exists()).toBe(false);
+  });
+
+  it("hides search by default and toggles it from Sources", async () => {
+    const app = createAppStub();
+    const wrapper = mount(AppToolbar, {
+      props: {
+        app,
+      },
+      global: {
+        stubs: {
+          Menubar: MenubarStub,
+          Dialog: DialogStub,
+          Transition: TransitionStub,
+        },
+      },
+    });
+
+    expect(wrapper.find(".toolbar__subrow").exists()).toBe(false);
+
+    const menuItems = wrapper.findComponent(MenubarStub).props("model") as any[];
+    const sourcesMenu = menuItems.find((item) => item.label === "Sources");
+    const showSearchItem = sourcesMenu.items.find((item: any) => item.label === "Show search");
+
+    showSearchItem.command();
+    await nextTick();
+
+    expect(wrapper.find(".toolbar__subrow").exists()).toBe(true);
+    expect(wrapper.find('input[type="search"]').exists()).toBe(true);
+
+    showSearchItem.command();
+    await nextTick();
+
+    expect(wrapper.find(".toolbar__subrow").exists()).toBe(false);
   });
 });

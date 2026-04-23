@@ -1,4 +1,4 @@
-import { defineComponent, h, ref } from "vue";
+import { defineComponent, h, reactive, ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 
@@ -39,6 +39,12 @@ function createAppStub(selectedIds: string[] = []) {
     isBusy: ref(false),
     launchContext: ref({ runtime: "window" }),
     session: ref(null),
+    todoPointerDragState: reactive({
+      hoverQuadrant: null as number | null,
+      active: false,
+    }),
+    handleTodoPointerDown: vi.fn(),
+    shouldSuppressTodoCardClick: vi.fn(() => false),
   } as any;
 }
 
@@ -176,10 +182,9 @@ describe("TodoQuadrant", () => {
     expect(hide).toHaveBeenCalled();
   });
 
-  it("sets up a ghost image when dragging a todo card", async () => {
+  it("starts the custom pointer drag flow from a todo card", async () => {
     const app = createAppStub(["main:todo-1", "main:todo-2"]);
-    const setData = vi.fn();
-    const setDragImage = vi.fn();
+    const PointerCtor = (window.PointerEvent ?? window.MouseEvent) as typeof MouseEvent;
     const wrapper = mount(TodoQuadrant, {
       props: {
         app,
@@ -197,16 +202,12 @@ describe("TodoQuadrant", () => {
       },
     });
 
-    await wrapper.find(".todo-card").trigger("dragstart", {
-      dataTransfer: {
-        setData,
-        setDragImage,
-      },
-    });
+    wrapper.find(".todo-card").element.dispatchEvent(new PointerCtor("pointerdown", {
+      clientX: 20,
+      clientY: 30,
+    }));
 
-    expect(app.beginDrag).toHaveBeenCalledWith("main:todo-1");
-    expect(setData).toHaveBeenCalled();
-    expect(setDragImage).toHaveBeenCalled();
+    expect(app.handleTodoPointerDown).toHaveBeenCalledWith("main:todo-1", expect.anything());
   });
 
   it("uploads files dropped onto a todo card", async () => {

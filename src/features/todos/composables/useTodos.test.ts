@@ -145,6 +145,82 @@ describe("useTodos", () => {
     unmount();
   });
 
+  it("moves todos between quadrants through the custom pointer drag flow", async () => {
+    const mainDatabase = createDatabaseStub([
+      {
+        id: "todo-1",
+        data: {
+          subject: "Alpha roadmap",
+          assignedTo: "Alice Example",
+          description: "Prepare the quarterly planning board",
+          quadrant: 1,
+          completed: false,
+          createdAt: "2026-04-20T00:00:00.000Z",
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ]);
+    const databases = {
+      main: mainDatabase,
+    };
+    const { result, unmount } = withSetup(() => useTodos({
+      selectedDatabaseIds: ref(["main"]),
+      databases: ref([
+        { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete"] },
+      ] as any),
+      preferredDatabaseId: computed(() => "main"),
+      getDatabase: vi.fn(async (databaseId: string) => databases[databaseId as keyof typeof databases] as any),
+      loading: ref(false),
+      busyAction: ref<string | null>(null),
+      error: ref<string | null>(null),
+      setSuccess: vi.fn(),
+    }));
+
+    await result.refreshTodos();
+
+    const dropTarget = document.createElement("div");
+    dropTarget.setAttribute("data-todo-quadrant", "3");
+    document.body.appendChild(dropTarget);
+    const originalElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: vi.fn(() => dropTarget),
+    });
+    const PointerCtor = (window.PointerEvent ?? window.MouseEvent) as typeof MouseEvent;
+
+    result.handleTodoPointerDown(
+      "main:todo-1",
+      new PointerCtor("pointerdown", {
+        button: 0,
+        clientX: 10,
+        clientY: 10,
+      }) as PointerEvent,
+    );
+
+    document.dispatchEvent(new PointerCtor("pointermove", {
+      clientX: 30,
+      clientY: 30,
+    }));
+    document.dispatchEvent(new PointerCtor("pointerup", {
+      clientX: 30,
+      clientY: 30,
+    }));
+
+    await vi.waitFor(() => {
+      expect(mainDatabase.documents.update).toHaveBeenCalledWith("todo-1", expect.objectContaining({
+        set: expect.objectContaining({ quadrant: 3 }),
+      }));
+    });
+
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: originalElementFromPoint,
+    });
+    dropTarget.remove();
+    unmount();
+  });
+
   it("supports selection-driven drag, bulk moves, and bulk deletes", async () => {
     const mainDatabase = createDatabaseStub([
       {
