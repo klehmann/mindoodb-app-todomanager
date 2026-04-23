@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
+import { onMounted, ref, watch } from "vue";
 import Message from "primevue/message";
 import ProgressSpinner from "primevue/progressspinner";
 import Toast from "primevue/toast";
 import { useToast } from "primevue/usetoast";
 
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
+import AppBackground from "@/features/app-shell/components/AppBackground.vue";
 import AppToolbar from "@/features/app-shell/components/AppToolbar.vue";
 import TodoBoard from "@/features/board/components/TodoBoard.vue";
 import TodoMobileBoard from "@/features/board/components/TodoMobileBoard.vue";
@@ -13,6 +14,9 @@ import TodoDialog from "@/features/todos/components/TodoDialog.vue";
 
 const app = useTodoManagerApp();
 const toast = useToast();
+
+/** See AppBackground: per-slide heuristic for quote legibility on the frosted footer. */
+const footerQuoteContrast = ref<"on-dark" | "on-bright">("on-dark");
 
 watch(
   () => app.error.value,
@@ -54,11 +58,18 @@ onMounted(() => {
 </script>
 
 <template>
+  <AppBackground
+    v-if="app.databases.value.length"
+    @footer-quote-contrast="footerQuoteContrast = $event"
+  />
   <main class="app-shell">
     <Toast group="todo-bottom" position="bottom-center" />
-    <AppToolbar :app="app" />
+    <AppToolbar
+      v-if="app.databases.value.length"
+      :app="app"
+    />
 
-    <section class="content-shell glass-card">
+    <section class="content-shell glass-card glass-card--frost glass-card--frost-tinted">
       <div
         v-if="app.loading.value && !app.filteredTodos.value.length"
         class="status-view"
@@ -72,7 +83,8 @@ onMounted(() => {
         class="status-view"
       >
         <Message severity="info">
-          No database mapping is available for this app yet.
+          No database mapping is configured for this application yet. Please create a database mapping for the
+          application in Haven.
         </Message>
       </div>
 
@@ -80,18 +92,8 @@ onMounted(() => {
         v-else
         class="board-shell"
       >
-        <div
-          v-if="!app.filteredTodos.value.length"
-          class="empty-board"
-        >
-          <h2>No todos match the current view.</h2>
-          <p>
-            Adjust the search or filters, or create a new todo to get started.
-          </p>
-        </div>
-
         <TodoMobileBoard
-          v-else-if="app.isCompactViewport.value"
+          v-if="app.isCompactViewport.value"
           :app="app"
         />
 
@@ -102,14 +104,24 @@ onMounted(() => {
       </div>
     </section>
 
+    <footer
+      v-if="app.databases.value.length"
+      class="footer-bar glass-card glass-card--frost"
+      :class="`footer-bar--quote-${footerQuoteContrast}`"
+    >
+      <span>Work from 1 to 4. Do the <em>ugliest</em> thing first. :-)</span>
+    </footer>
+
     <TodoDialog :app="app" />
   </main>
 </template>
 
 <style scoped>
 .app-shell {
+  position: relative;
+  z-index: 1;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 2px;
   margin: 0 auto;
   max-width: 100%;
@@ -122,8 +134,7 @@ onMounted(() => {
   padding: 0.95rem;
 }
 
-.status-view,
-.empty-board {
+.status-view {
   display: grid;
   place-items: center;
   gap: 0.8rem;
@@ -132,17 +143,42 @@ onMounted(() => {
   color: var(--muted);
 }
 
-.empty-board h2 {
-  margin: 0;
-  color: var(--text);
-}
-
-.empty-board p {
-  margin: 0;
-  max-width: 32rem;
-}
-
 .board-shell {
   min-height: 0;
+}
+
+.footer-bar {
+  position: sticky;
+  bottom: 2px;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.footer-bar em {
+  font-style: italic;
+}
+
+/* Chosen from AppBackground slide – light copy on dim scenes, dark copy on bright ground/sky. */
+.footer-bar--quote-on-dark {
+  color: rgba(236, 240, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.footer-bar--quote-on-dark em {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.footer-bar--quote-on-bright {
+  color: rgba(16, 24, 42, 0.9);
+  text-shadow: 0 1px 1px rgba(255, 255, 255, 0.25);
+}
+
+.footer-bar--quote-on-bright em {
+  color: rgba(10, 16, 32, 0.95);
 }
 </style>

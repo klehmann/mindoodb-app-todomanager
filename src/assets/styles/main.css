@@ -21,7 +21,11 @@
   --radius-lg: 24px;
   --radius-md: 18px;
   --radius-sm: 14px;
-  --surface-blur: blur(22px);
+  --surface-blur: none;
+  /** Translucent panels; no backdrop blur so the photo stays sharp. */
+  --bg-glass: rgba(6, 10, 20, 0.12);
+  --bg-glass-strong: rgba(6, 10, 20, 0.2);
+  --glass-backdrop: none;
   font-family:
     Inter,
     ui-sans-serif,
@@ -38,6 +42,8 @@
   --bg-elevated: rgba(255, 255, 255, 0.94);
   --bg-soft: rgba(244, 247, 255, 0.94);
   --bg-muted: rgba(237, 241, 249, 0.94);
+  --bg-glass: rgba(255, 255, 255, 0.1);
+  --bg-glass-strong: rgba(255, 255, 255, 0.16);
   --border: rgba(31, 58, 138, 0.14);
   --border-strong: rgba(212, 160, 23, 0.28);
   --text: #17233b;
@@ -50,6 +56,8 @@
   --bg-elevated: rgba(12, 18, 34, 0.94);
   --bg-soft: rgba(27, 39, 70, 0.78);
   --bg-muted: rgba(17, 27, 49, 0.82);
+  --bg-glass: rgba(6, 10, 20, 0.12);
+  --bg-glass-strong: rgba(6, 10, 20, 0.2);
   --border: rgba(118, 141, 191, 0.2);
   --border-strong: rgba(212, 160, 23, 0.26);
   --text: #eef2ff;
@@ -67,6 +75,8 @@
   --bg-elevated: rgba(255, 255, 255, 0.94);
   --bg-soft: rgba(244, 247, 255, 0.94);
   --bg-muted: rgba(237, 241, 249, 0.94);
+  --bg-glass: rgba(255, 255, 255, 0.1);
+  --bg-glass-strong: rgba(255, 255, 255, 0.16);
   --border: rgba(31, 58, 138, 0.14);
   --border-strong: rgba(212, 160, 23, 0.28);
   --text: #17233b;
@@ -79,6 +89,8 @@
   --bg-elevated: rgba(9, 16, 29, 0.95);
   --bg-soft: rgba(17, 31, 54, 0.82);
   --bg-muted: rgba(12, 21, 39, 0.88);
+  --bg-glass: rgba(4, 10, 20, 0.14);
+  --bg-glass-strong: rgba(4, 10, 20, 0.22);
   --border: rgba(82, 152, 247, 0.18);
   --border-strong: rgba(232, 191, 60, 0.28);
   --text: #f4f8ff;
@@ -95,6 +107,8 @@
   --bg-elevated: rgba(255, 255, 255, 0.95);
   --bg-soft: rgba(240, 246, 255, 0.95);
   --bg-muted: rgba(231, 238, 248, 0.95);
+  --bg-glass: rgba(255, 255, 255, 0.1);
+  --bg-glass-strong: rgba(255, 255, 255, 0.16);
   --border: rgba(35, 99, 175, 0.14);
   --border-strong: rgba(190, 150, 13, 0.28);
   --text: #162238;
@@ -145,6 +159,30 @@ a {
   background: var(--bg-elevated);
   box-shadow: var(--shadow);
   backdrop-filter: var(--surface-blur);
+}
+
+/**
+ * See-through shell: tint only (blur optional via --glass-backdrop).
+ */
+.glass-card--frost {
+  background: var(--bg-glass);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.glass-card--frost.glass-card--frost-tinted {
+  background: linear-gradient(180deg, var(--bg-glass-strong) 0%, var(--bg-glass) 100%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-card--frost {
+    background: var(--bg-elevated);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
 }
 
 .field {

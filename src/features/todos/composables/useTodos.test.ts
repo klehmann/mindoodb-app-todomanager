@@ -5,38 +5,10 @@ import { withSetup } from "@/test-utils/withSetup";
 
 import { useTodos } from "./useTodos";
 
-function createDatabaseStub() {
+function createDatabaseStub(items: Array<Record<string, unknown>>) {
   return {
     documents: {
-      list: vi.fn().mockResolvedValue({
-        items: [
-          {
-            id: "todo-1",
-            data: {
-              subject: "Alpha",
-              description: "",
-              quadrant: 2,
-              completed: false,
-              createdAt: "2026-04-20T00:00:00.000Z",
-              updatedAt: "2026-04-21T00:00:00.000Z",
-            },
-            updatedAt: "2026-04-21T00:00:00.000Z",
-          },
-          {
-            id: "todo-2",
-            data: {
-              subject: "Beta",
-              description: "Done",
-              quadrant: 4,
-              completed: true,
-              createdAt: "2026-04-19T00:00:00.000Z",
-              updatedAt: "2026-04-19T00:00:00.000Z",
-            },
-            updatedAt: "2026-04-19T00:00:00.000Z",
-          },
-        ],
-        nextCursor: null,
-      }),
+      list: vi.fn().mockResolvedValue({ items, nextCursor: null }),
       create: vi.fn(),
       update: vi.fn().mockResolvedValue({ ok: true }),
       delete: vi.fn().mockResolvedValue({ ok: true }),
@@ -46,16 +18,49 @@ function createDatabaseStub() {
 
 describe("useTodos", () => {
   it("loads todos and groups them by quadrant with filtering", async () => {
-    const database = createDatabaseStub();
+    const mainDatabase = createDatabaseStub([
+      {
+        id: "todo-1",
+        data: {
+          subject: "Alpha",
+          description: "",
+          quadrant: 2,
+          completed: false,
+          createdAt: "2026-04-20T00:00:00.000Z",
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ]);
+    const secondaryDatabase = createDatabaseStub([
+      {
+        id: "todo-2",
+        data: {
+          subject: "Beta",
+          description: "Done",
+          quadrant: 4,
+          completed: true,
+          createdAt: "2026-04-19T00:00:00.000Z",
+          updatedAt: "2026-04-19T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-19T00:00:00.000Z",
+      },
+    ]);
     const loading = ref(false);
     const busyAction = ref<string | null>(null);
     const error = ref<string | null>(null);
+    const databases = {
+      main: mainDatabase,
+      secondary: secondaryDatabase,
+    };
     const { result, unmount } = withSetup(() => useTodos({
-      selectedDatabase: ref(database as any),
-      canRead: computed(() => true),
-      canCreate: computed(() => true),
-      canUpdate: computed(() => true),
-      canDelete: computed(() => true),
+      selectedDatabaseIds: ref(["main", "secondary"]),
+      databases: ref([
+        { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete"] },
+        { id: "secondary", title: "Secondary", capabilities: ["read", "create", "update", "delete"] },
+      ] as any),
+      preferredDatabaseId: computed(() => "main"),
+      getDatabase: vi.fn(async (databaseId: string) => databases[databaseId as keyof typeof databases] as any),
       loading,
       busyAction,
       error,
@@ -65,6 +70,7 @@ describe("useTodos", () => {
     await result.refreshTodos();
 
     expect(result.todos.value).toHaveLength(2);
+    expect(result.todos.value[0]?.databaseId).toBe("main");
     expect(result.todosByQuadrant.value[2]).toHaveLength(1);
     expect(result.todosByQuadrant.value[4]).toHaveLength(0);
 
@@ -75,14 +81,47 @@ describe("useTodos", () => {
   });
 
   it("supports selection-driven drag, bulk moves, and bulk deletes", async () => {
-    const database = createDatabaseStub();
+    const mainDatabase = createDatabaseStub([
+      {
+        id: "todo-1",
+        data: {
+          subject: "Alpha",
+          description: "",
+          quadrant: 2,
+          completed: false,
+          createdAt: "2026-04-20T00:00:00.000Z",
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ]);
+    const secondaryDatabase = createDatabaseStub([
+      {
+        id: "todo-2",
+        data: {
+          subject: "Beta",
+          description: "Done",
+          quadrant: 4,
+          completed: true,
+          createdAt: "2026-04-19T00:00:00.000Z",
+          updatedAt: "2026-04-19T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-19T00:00:00.000Z",
+      },
+    ]);
     const setSuccess = vi.fn();
+    const databases = {
+      main: mainDatabase,
+      secondary: secondaryDatabase,
+    };
     const { result, unmount } = withSetup(() => useTodos({
-      selectedDatabase: ref(database as any),
-      canRead: computed(() => true),
-      canCreate: computed(() => true),
-      canUpdate: computed(() => true),
-      canDelete: computed(() => true),
+      selectedDatabaseIds: ref(["main", "secondary"]),
+      databases: ref([
+        { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete"] },
+        { id: "secondary", title: "Secondary", capabilities: ["read", "create", "update", "delete"] },
+      ] as any),
+      preferredDatabaseId: computed(() => "main"),
+      getDatabase: vi.fn(async (databaseId: string) => databases[databaseId as keyof typeof databases] as any),
       loading: ref(false),
       busyAction: ref<string | null>(null),
       error: ref<string | null>(null),
@@ -90,16 +129,139 @@ describe("useTodos", () => {
     }));
 
     await result.refreshTodos();
-    result.setSelectedTodoIds(["todo-1", "todo-2"]);
+    result.setSelectedTodoIds(["main:todo-1", "secondary:todo-2"]);
 
-    expect(result.beginDrag("todo-1")).toEqual(["todo-1", "todo-2"]);
+    expect(result.beginDrag("main:todo-1")).toEqual(["main:todo-1", "secondary:todo-2"]);
 
     await result.moveSelectedTodos(3);
-    expect(database.documents.update).toHaveBeenCalledTimes(2);
+    expect(mainDatabase.documents.update).toHaveBeenCalledTimes(1);
+    expect(secondaryDatabase.documents.update).toHaveBeenCalledTimes(1);
 
     await result.deleteSelectedTodos();
-    expect(database.documents.delete).toHaveBeenCalledTimes(2);
+    expect(mainDatabase.documents.delete).toHaveBeenCalledTimes(1);
+    expect(secondaryDatabase.documents.delete).toHaveBeenCalledTimes(1);
     expect(setSuccess).toHaveBeenCalled();
+
+    unmount();
+  });
+
+  it("marks todos as completed across databases", async () => {
+    const mainDatabase = createDatabaseStub([
+      {
+        id: "todo-1",
+        data: {
+          subject: "Alpha",
+          description: "",
+          quadrant: 2,
+          completed: false,
+          createdAt: "2026-04-20T00:00:00.000Z",
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-21T00:00:00.000Z",
+      },
+    ]);
+    const secondaryDatabase = createDatabaseStub([
+      {
+        id: "todo-2",
+        data: {
+          subject: "Beta",
+          description: "",
+          quadrant: 4,
+          completed: false,
+          createdAt: "2026-04-19T00:00:00.000Z",
+          updatedAt: "2026-04-19T00:00:00.000Z",
+        },
+        updatedAt: "2026-04-19T00:00:00.000Z",
+      },
+    ]);
+    const databases = {
+      main: mainDatabase,
+      secondary: secondaryDatabase,
+    };
+    const { result, unmount } = withSetup(() => useTodos({
+      selectedDatabaseIds: ref(["main", "secondary"]),
+      databases: ref([
+        { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete"] },
+        { id: "secondary", title: "Secondary", capabilities: ["read", "create", "update", "delete"] },
+      ] as any),
+      preferredDatabaseId: computed(() => "main"),
+      getDatabase: vi.fn(async (databaseId: string) => databases[databaseId as keyof typeof databases] as any),
+      loading: ref(false),
+      busyAction: ref<string | null>(null),
+      error: ref<string | null>(null),
+      setSuccess: vi.fn(),
+    }));
+
+    await result.refreshTodos();
+    await result.setTodosCompleted(["main:todo-1", "secondary:todo-2"], true);
+
+    expect(mainDatabase.documents.update).toHaveBeenCalledTimes(1);
+    expect(secondaryDatabase.documents.update).toHaveBeenCalledTimes(1);
+    expect(mainDatabase.documents.update).toHaveBeenCalledWith("todo-1", expect.objectContaining({
+      set: expect.objectContaining({ completed: true }),
+    }));
+
+    unmount();
+  });
+
+  it("loads assignedTo from the full document when opening a todo", async () => {
+    const database = {
+      documents: {
+        list: vi.fn().mockResolvedValue({
+          items: [
+            {
+              id: "todo-1",
+              data: {
+                subject: "Alpha",
+                description: "",
+                quadrant: 2,
+                completed: false,
+                createdAt: "2026-04-20T00:00:00.000Z",
+                updatedAt: "2026-04-21T00:00:00.000Z",
+              },
+              updatedAt: "2026-04-21T00:00:00.000Z",
+            },
+          ],
+          nextCursor: null,
+        }),
+        get: vi.fn().mockResolvedValue({
+          id: "todo-1",
+          data: {
+            subject: "Alpha",
+            assignedTo: "Alex Example",
+            description: "",
+            quadrant: 2,
+            completed: false,
+            createdAt: "2026-04-20T00:00:00.000Z",
+            updatedAt: "2026-04-21T00:00:00.000Z",
+          },
+          updatedAt: "2026-04-21T00:00:00.000Z",
+        }),
+        create: vi.fn(),
+        update: vi.fn().mockResolvedValue({ ok: true }),
+        delete: vi.fn().mockResolvedValue({ ok: true }),
+      },
+      attachments: {
+        list: vi.fn().mockResolvedValue([]),
+      },
+    };
+    const { result, unmount } = withSetup(() => useTodos({
+      selectedDatabaseIds: ref(["main"]),
+      databases: ref([
+        { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete", "attachments"] },
+      ] as any),
+      preferredDatabaseId: computed(() => "main"),
+      getDatabase: vi.fn(async () => database as any),
+      loading: ref(false),
+      busyAction: ref<string | null>(null),
+      error: ref<string | null>(null),
+      setSuccess: vi.fn(),
+    }));
+
+    await result.refreshTodos();
+    await result.openTodo("main:todo-1");
+
+    expect(result.draft.value.assignedTo).toBe("Alex Example");
 
     unmount();
   });

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import Button from "primevue/button";
+import { computed, ref } from "vue";
+import Dialog from "primevue/dialog";
 import Menubar from "primevue/menubar";
 import type { MenuItem } from "primevue/menuitem";
+import MultiSelect from "primevue/multiselect";
 
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
 import { TODO_QUADRANTS, type TodoFilterMode, type TodoSortMode, type TodoSyncMode } from "@/features/todos/composables/todoTypes";
@@ -10,6 +11,8 @@ import { TODO_QUADRANTS, type TodoFilterMode, type TodoSortMode, type TodoSyncMo
 const props = defineProps<{
   app: ReturnType<typeof useTodoManagerApp>;
 }>();
+
+const helpDialogVisible = ref(false);
 
 const refreshModeLabels: Record<TodoSyncMode, string> = {
   off: "Sync off",
@@ -75,6 +78,13 @@ async function handleRecycleDrop(event: DragEvent) {
   props.app.endDrag();
 }
 
+const selectedDatabasesModel = computed({
+  get: () => props.app.selectedDatabaseIds.value,
+  set: (value: string[] | null | undefined) => {
+    void props.app.selectDatabases(value ?? []);
+  },
+});
+
 const menuItems = computed<MenuItem[]>(() => [
   {
     label: "File",
@@ -83,7 +93,7 @@ const menuItems = computed<MenuItem[]>(() => [
       {
         label: "New todo",
         icon: "pi pi-plus",
-        disabled: !props.app.canCreate.value || props.app.isBusy.value,
+        disabled: !props.app.canCreateAny.value || props.app.isBusy.value,
         command: () => {
           props.app.startCreateTodo(props.app.activeMobileQuadrant.value);
         },
@@ -106,7 +116,7 @@ const menuItems = computed<MenuItem[]>(() => [
         icon: props.app.selectedQuadrants.value.length === 1 && props.app.selectedQuadrants.value[0] === entry.quadrant
           ? "pi pi-check"
           : undefined,
-        disabled: !props.app.selectedCount.value || !props.app.canUpdate.value,
+        disabled: !props.app.selectedCount.value || !props.app.canUpdateSelected.value,
         command: () => {
           void props.app.moveSelectedTodos(entry.quadrant);
         },
@@ -117,7 +127,7 @@ const menuItems = computed<MenuItem[]>(() => [
       {
         label: "Delete selected",
         icon: "pi pi-trash",
-        disabled: !props.app.selectedCount.value || !props.app.canDelete.value,
+        disabled: !props.app.selectedCount.value || !props.app.canDeleteSelected.value,
         command: () => {
           void handleRecycle();
         },
@@ -165,12 +175,25 @@ const menuItems = computed<MenuItem[]>(() => [
       },
     ],
   },
+  {
+    label: "Help",
+    icon: "pi pi-question-circle",
+    items: [
+      {
+        label: "How TodoManager works",
+        icon: "pi pi-info-circle",
+        command: () => {
+          helpDialogVisible.value = true;
+        },
+      },
+    ],
+  },
 ]);
 </script>
 
 <template>
   <header
-    class="toolbar glass-card"
+    class="toolbar glass-card glass-card--frost"
     :class="{ 'toolbar--ios-multitasking': props.app.hostUiPreferences.value.iosMultitaskingOptimized }"
   >
     <Menubar :model="menuItems" class="toolbar__menubar">
@@ -235,19 +258,16 @@ const menuItems = computed<MenuItem[]>(() => [
 
       <label class="toolbar__field">
         <span>Database</span>
-        <select
-          class="native-select"
-          :value="props.app.selectedDatabaseId.value ?? ''"
-          @change="props.app.selectDatabase(($event.target as HTMLSelectElement).value)"
-        >
-          <option
-            v-for="database in props.app.databases.value"
-            :key="database.id"
-            :value="database.id"
-          >
-            {{ database.title }}
-          </option>
-        </select>
+        <MultiSelect
+          v-model="selectedDatabasesModel"
+          :options="props.app.databases.value"
+          option-label="title"
+          option-value="id"
+          display="chip"
+          :max-selected-labels="2"
+          placeholder="Choose databases"
+          class="toolbar__database-select"
+        />
       </label>
 
       <div
@@ -281,6 +301,35 @@ const menuItems = computed<MenuItem[]>(() => [
       </button>
     </div>
   </header>
+
+  <Dialog
+    v-model:visible="helpDialogVisible"
+    modal
+    header="How TodoManager Works"
+    :style="{ width: '42rem', maxWidth: '96vw' }"
+  >
+    <div class="toolbar__help">
+      <p>
+        TodoManager follows the 4 quadrant method: do urgent and important work first, plan important work
+        that is not due soon, delegate or batch less important urgent work, and reduce low-value work where
+        possible.
+      </p>
+      <ul>
+        <li><strong>1:</strong> Important and due soon</li>
+        <li><strong>2:</strong> Important and not due soon</li>
+        <li><strong>3:</strong> Not important and due soon</li>
+        <li><strong>4:</strong> Not important and not due soon</li>
+      </ul>
+      <p>
+        Use the filter bar to search, filter, sort, and combine multiple databases in one view. Drag todos
+        between quadrants to re-prioritize them, or drag them to the recycle bin to delete them.
+      </p>
+      <p>
+        Double click the background of a quadrant on desktop, or double tap it on touch devices, to create a
+        new todo with that quadrant preselected.
+      </p>
+    </div>
+  </Dialog>
 </template>
 
 <style scoped>
@@ -358,6 +407,10 @@ const menuItems = computed<MenuItem[]>(() => [
   text-transform: uppercase;
 }
 
+:deep(.toolbar__database-select) {
+  width: 100%;
+}
+
 .toolbar__mobile-targets {
   display: inline-flex;
   align-items: center;
@@ -389,6 +442,20 @@ const menuItems = computed<MenuItem[]>(() => [
 
 .toolbar__recycle:disabled {
   opacity: 0.55;
+}
+
+.toolbar__help {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.toolbar__help p,
+.toolbar__help ul {
+  margin: 0;
+}
+
+.toolbar__help ul {
+  padding-left: 1.2rem;
 }
 
 @media (max-width: 1040px) {

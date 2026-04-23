@@ -1,7 +1,13 @@
 import { computed, ref, type ComputedRef, type Ref } from "vue";
-import type { MindooDBAppDatabase } from "mindoodb-app-sdk";
+import {
+  canPreviewAttachment,
+  type MindooDBAppAttachmentInfo,
+  type MindooDBAppDatabase,
+  type MindooDBAppDatabaseInfo,
+} from "mindoodb-app-sdk";
 
 import {
+  buildTodoSelectionKey,
   buildTodoCreateInput,
   buildTodoPatch,
   EMPTY_TODO_DRAFT,
@@ -21,12 +27,43 @@ function byDate(value: string | null) {
   return value ? Date.parse(value) || 0 : 0;
 }
 
+async function readAttachmentBlob(database: MindooDBAppDatabase, docId: string, attachmentName: string) {
+  const stream = await database.attachments.openReadStream(docId, attachmentName);
+  const chunks: Uint8Array[] = [];
+  try {
+    while (true) {
+      const chunk = await stream.read();
+      if (!chunk) {
+        break;
+      }
+      chunks.push(chunk);
+    }
+  } finally {
+    await stream.close();
+  }
+
+  return new Blob(chunks.map((chunk) => Uint8Array.from(chunk)));
+}
+
+function formatAttachmentSize(size: number) {
+  if (!Number.isFinite(size) || size < 1024) {
+    return `${Math.max(0, Math.round(size || 0))} B`;
+  }
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = size / 1024;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unitIndex]}`;
+}
+
 export interface UseTodosOptions {
-  selectedDatabase: Ref<MindooDBAppDatabase | null>;
-  canRead: ComputedRef<boolean>;
-  canCreate: ComputedRef<boolean>;
-  canUpdate: ComputedRef<boolean>;
-  canDelete: ComputedRef<boolean>;
+  selectedDatabaseIds: Ref<string[]>;
+  databases: Ref<MindooDBAppDatabaseInfo[]>;
+  preferredDatabaseId: ComputedRef<string | null>;
+  getDatabase: (databaseId: string) => Promise<MindooDBAppDatabase | null>;
   loading: Ref<boolean>;
   busyAction: Ref<string | null>;
   error: Ref<string | null>;
@@ -40,19 +77,66 @@ export function useTodos(options: UseTodosOptions) {
   const dialogVisible = ref(false);
   const dialogMode = ref<"create" | "edit">("create");
   const dialogTodoId = ref<string | null>(null);
+  const draftDatabaseId = ref<string | null>(null);
+  const dialogAttachments = ref<MindooDBAppAttachmentInfo[]>([]);
+  const attachmentUploadInputKey = ref(0);
   const draft = ref<TodoDraft>({ ...EMPTY_TODO_DRAFT });
   const searchQuery = ref("");
   const filterMode = ref<TodoFilterMode>("open");
   const sortMode = ref<TodoSortMode>("updated-desc");
   const activeMobileQuadrant = ref<TodoQuadrant>(1);
+  const databaseInfoById = computed<Record<string, MindooDBAppDatabaseInfo>>(() =>
+    Object.fromEntries(options.databases.value.map((entry) => [entry.id, entry])),
+  );
+  const createTargetDatabases = computed(() => options.databases.value);
+  const canCreateAny = computed(() =>
+    createTargetDatabases.value.some((entry) => entry.capabilities.includes("create")),
+  );
+  const currentDialogTodo = computed(() =>
+    dialogTodoId.value
+      ? todos.value.find((todo) => todo.selectionKey === dialogTodoId.value) ?? null
+      : null,
+  );
+  const dialogDatabaseId = computed(() =>
+    currentDialogTodo.value?.databaseId
+    ?? draftDatabaseId.value
+    ?? null,
+  );
+  const dialogDatabaseInfo = computed(() =>
+    dialogDatabaseId.value ? databaseInfoById.value[dialogDatabaseId.value] ?? null : null,
+  );
+  const dialogDocumentId = computed(() => currentDialogTodo.value?.id ?? null);
 
   const selectedTodoSet = computed(() => new Set(selectedTodoIds.value));
   const selectedCount = computed(() => selectedTodoIds.value.length);
   const selectedTodos = computed(() =>
-    todos.value.filter((todo) => selectedTodoSet.value.has(todo.id)),
+    todos.value.filter((todo) => selectedTodoSet.value.has(todo.selectionKey)),
   );
   const selectedQuadrants = computed(() =>
     Array.from(new Set(selectedTodos.value.map((todo) => todo.quadrant))),
+  );
+  const canUpdateSelected = computed(() =>
+    selectedTodos.value.length > 0
+    && selectedTodos.value.every((todo) =>
+      databaseInfoById.value[todo.databaseId]?.capabilities.includes("update") ?? false,
+    ),
+  );
+  const canDeleteSelected = computed(() =>
+    selectedTodos.value.length > 0
+    && selectedTodos.value.every((todo) =>
+      databaseInfoById.value[todo.databaseId]?.capabilities.includes("delete") ?? false,
+    ),
+  );
+  const canUseDialogAttachments = computed(() =>
+    dialogDatabaseId.value
+      ? databaseInfoById.value[dialogDatabaseId.value]?.capabilities.includes("attachments") ?? false
+      : false,
+  );
+  const canManageDialogAttachments = computed(() =>
+    dialogDatabaseId.value
+      ? (databaseInfoById.value[dialogDatabaseId.value]?.capabilities.includes("attachments") ?? false)
+        && (databaseInfoById.value[dialogDatabaseId.value]?.capabilities.includes("update") ?? false)
+      : false,
   );
 
   const filteredTodos = computed(() => {
@@ -98,33 +182,56 @@ export function useTodos(options: UseTodosOptions) {
   const mobileTodos = computed(() => todosByQuadrant.value[activeMobileQuadrant.value]);
 
   function setSelectedTodoIds(ids: string[]) {
-    selectedTodoIds.value = Array.from(new Set(ids)).filter((id) => todos.value.some((todo) => todo.id === id));
+    selectedTodoIds.value = Array.from(new Set(ids)).filter((id) =>
+      todos.value.some((todo) => todo.selectionKey === id),
+    );
   }
 
   function clearSelection() {
     selectedTodoIds.value = [];
   }
 
-  function isSelected(todoId: string) {
-    return selectedTodoSet.value.has(todoId);
+  function isSelected(todoKey: string) {
+    return selectedTodoSet.value.has(todoKey);
   }
 
-  function selectTodo(todoId: string, additive = false) {
+  function selectTodo(todoKey: string, additive = false) {
     if (additive) {
-      if (isSelected(todoId)) {
-        selectedTodoIds.value = selectedTodoIds.value.filter((id) => id !== todoId);
+      if (isSelected(todoKey)) {
+        selectedTodoIds.value = selectedTodoIds.value.filter((id) => id !== todoKey);
       } else {
-        selectedTodoIds.value = [...selectedTodoIds.value, todoId];
+        selectedTodoIds.value = [...selectedTodoIds.value, todoKey];
       }
       return;
     }
 
-    selectedTodoIds.value = [todoId];
+    selectedTodoIds.value = [todoKey];
   }
 
-  function startCreateTodo(quadrant: TodoQuadrant = activeMobileQuadrant.value) {
+  function findTodoBySelectionKey(todoKey: string | null) {
+    return todoKey ? todos.value.find((todo) => todo.selectionKey === todoKey) ?? null : null;
+  }
+
+  function defaultDraftDatabaseId() {
+    if (draftDatabaseId.value && databaseInfoById.value[draftDatabaseId.value]) {
+      return draftDatabaseId.value;
+    }
+
+    if (options.preferredDatabaseId.value && databaseInfoById.value[options.preferredDatabaseId.value]) {
+      return options.preferredDatabaseId.value;
+    }
+
+    return options.databases.value[0]?.id ?? null;
+  }
+
+  function startCreateTodo(
+    quadrant: TodoQuadrant = activeMobileQuadrant.value,
+    databaseId = defaultDraftDatabaseId(),
+  ) {
     dialogMode.value = "create";
     dialogTodoId.value = null;
+    draftDatabaseId.value = databaseId;
+    dialogAttachments.value = [];
     draft.value = {
       ...EMPTY_TODO_DRAFT,
       quadrant,
@@ -132,27 +239,43 @@ export function useTodos(options: UseTodosOptions) {
     dialogVisible.value = true;
   }
 
-  function openTodo(todoId: string) {
-    const todo = todos.value.find((entry) => entry.id === todoId);
-    if (!todo) {
+  async function openTodo(todoKey: string) {
+    const existingTodo = todos.value.find((entry) => entry.selectionKey === todoKey);
+    if (!existingTodo) {
       return;
     }
 
+    let todo = existingTodo;
+    try {
+      const database = await options.getDatabase(existingTodo.databaseId);
+      const document = database ? await database.documents.get(existingTodo.id) : null;
+      if (document) {
+        todo = readTodoItem(document, existingTodo.databaseId);
+      }
+    } catch {
+      // Fall back to the currently listed row when the full document cannot be fetched.
+    }
+
     dialogMode.value = "edit";
-    dialogTodoId.value = todo.id;
+    dialogTodoId.value = todo.selectionKey;
+    draftDatabaseId.value = todo.databaseId;
     draft.value = {
       subject: todo.subject,
+      assignedTo: todo.assignedTo,
       description: todo.description,
       quadrant: todo.quadrant,
       dueAt: todo.dueAt,
       startAt: todo.startAt,
       completed: todo.completed,
     };
+    dialogAttachments.value = [...todo.attachments];
     dialogVisible.value = true;
   }
 
   function closeDialog() {
     dialogVisible.value = false;
+    draftDatabaseId.value = null;
+    dialogAttachments.value = [];
   }
 
   function setDraft<K extends keyof TodoDraft>(key: K, value: TodoDraft[K]) {
@@ -162,32 +285,54 @@ export function useTodos(options: UseTodosOptions) {
     };
   }
 
-  async function listAllTodos() {
-    if (!options.selectedDatabase.value || !options.canRead.value) {
-      todos.value = [];
-      clearSelection();
-      return;
+  async function listDatabaseTodos(databaseId: string) {
+    const databaseInfo = databaseInfoById.value[databaseId];
+    if (!databaseInfo?.capabilities.includes("read")) {
+      return [];
+    }
+
+    const database = await options.getDatabase(databaseId);
+    if (!database) {
+      return [];
     }
 
     const items: TodoItem[] = [];
     let cursor: string | null = null;
 
     while (true) {
-      const page = await options.selectedDatabase.value.documents.list({
+      const page = await database.documents.list({
         cursor,
         limit: 250,
         status: "existing",
       });
 
-      items.push(...page.items.map((item) => readTodoItem(item)));
+      items.push(...page.items.map((item) => readTodoItem(item, databaseId)));
       if (!page.nextCursor || page.nextCursor === cursor) {
         break;
       }
       cursor = page.nextCursor;
     }
 
-    todos.value = items;
+    return items;
+  }
+
+  async function listAllTodos() {
+    const readableDatabaseIds = options.selectedDatabaseIds.value.filter((databaseId) =>
+      databaseInfoById.value[databaseId]?.capabilities.includes("read") ?? false,
+    );
+
+    if (!readableDatabaseIds.length) {
+      todos.value = [];
+      clearSelection();
+      return;
+    }
+
+    const groups = await Promise.all(readableDatabaseIds.map(async (databaseId) => await listDatabaseTodos(databaseId)));
+    todos.value = groups.flat();
     setSelectedTodoIds(selectedTodoIds.value);
+    if (dialogTodoId.value) {
+      applyDialogAttachmentsFromTodoList(dialogTodoId.value);
+    }
   }
 
   async function refreshTodos() {
@@ -203,11 +348,187 @@ export function useTodos(options: UseTodosOptions) {
     }
   }
 
-  async function saveDialogTodo() {
-    if (!options.selectedDatabase.value) {
+  function canUseTodoAttachments(todoKey: string) {
+    const todo = findTodoBySelectionKey(todoKey);
+    if (!todo) {
+      return false;
+    }
+    return databaseInfoById.value[todo.databaseId]?.capabilities.includes("attachments") ?? false;
+  }
+
+  function canManageTodoAttachments(todoKey: string) {
+    const todo = findTodoBySelectionKey(todoKey);
+    if (!todo) {
+      return false;
+    }
+    const capabilities = databaseInfoById.value[todo.databaseId]?.capabilities ?? [];
+    return capabilities.includes("attachments") && capabilities.includes("update");
+  }
+
+  function applyDialogAttachmentsFromTodoList(todoKey: string) {
+    if (dialogTodoId.value !== todoKey) {
+      return;
+    }
+    const todo = findTodoBySelectionKey(todoKey);
+    dialogAttachments.value = todo ? [...todo.attachments] : [];
+  }
+
+  function getTodoAttachmentCount(todoKey: string) {
+    return findTodoBySelectionKey(todoKey)?.attachments.length ?? 0;
+  }
+
+  function getTodoAttachmentTooltip(todoKey: string) {
+    const todo = findTodoBySelectionKey(todoKey);
+    const items = todo?.attachments;
+    if (!items?.length) {
+      return "No attachments";
+    }
+
+    return items
+      .map((attachment) => `${attachment.fileName} (${formatAttachmentSize(attachment.size)})`)
+      .join("\n");
+  }
+
+  async function uploadTodoAttachments(todoKey: string | null, fileList: FileList | readonly File[] | null) {
+    const todo = findTodoBySelectionKey(todoKey);
+    const files = fileList ? Array.from(fileList) : [];
+    if (!todo || !files.length) {
+      return;
+    }
+    if (!canManageTodoAttachments(todo.selectionKey)) {
+      throw new Error("This todo does not allow managing attachments.");
+    }
+
+    const database = await options.getDatabase(todo.databaseId);
+    if (!database) {
+      throw new Error("Failed to open the todo database.");
+    }
+
+    options.busyAction.value = "Uploading attachment";
+    options.error.value = null;
+
+    try {
+      for (const file of files) {
+        const stream = await database.attachments.openWriteStream(
+          todo.id,
+          file.name,
+          file.type || "application/octet-stream",
+        );
+
+        try {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const chunkSize = 64 * 1024;
+          for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+            await stream.write(bytes.slice(offset, offset + chunkSize));
+          }
+          await stream.close();
+        } catch (streamError) {
+          await stream.abort();
+          throw streamError;
+        }
+      }
+
+      attachmentUploadInputKey.value += 1;
+      await listAllTodos();
+      options.setSuccess(`Uploaded ${files.length} attachment${files.length === 1 ? "" : "s"}.`);
+    } catch (uploadError) {
+      options.error.value = readErrorMessage(uploadError, "The attachment upload failed.");
+      throw uploadError;
+    } finally {
+      options.busyAction.value = null;
+    }
+  }
+
+  async function uploadDialogAttachments(fileList: FileList | readonly File[] | null) {
+    await uploadTodoAttachments(dialogTodoId.value, fileList);
+  }
+
+  async function previewDialogAttachment(attachmentName: string) {
+    const todo = currentDialogTodo.value;
+    if (!todo || !canUseDialogAttachments.value) {
       return;
     }
 
+    const database = await options.getDatabase(todo.databaseId);
+    if (!database) {
+      throw new Error("Failed to open the todo database.");
+    }
+
+    options.busyAction.value = "Opening attachment preview";
+    options.error.value = null;
+
+    try {
+      await database.attachments.openPreview(todo.id, attachmentName);
+    } catch (previewError) {
+      options.error.value = readErrorMessage(previewError, "The attachment preview could not be opened.");
+      throw previewError;
+    } finally {
+      options.busyAction.value = null;
+    }
+  }
+
+  async function downloadDialogAttachment(attachmentName: string) {
+    const todo = currentDialogTodo.value;
+    if (!todo || !canUseDialogAttachments.value) {
+      return;
+    }
+
+    const database = await options.getDatabase(todo.databaseId);
+    if (!database) {
+      throw new Error("Failed to open the todo database.");
+    }
+
+    options.busyAction.value = "Extracting attachment";
+    options.error.value = null;
+
+    try {
+      const blob = await readAttachmentBlob(database, todo.id, attachmentName);
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      link.download = attachmentName;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (downloadError) {
+      options.error.value = readErrorMessage(downloadError, "The attachment could not be extracted.");
+      throw downloadError;
+    } finally {
+      options.busyAction.value = null;
+    }
+  }
+
+  async function removeDialogAttachment(attachmentName: string) {
+    const todo = currentDialogTodo.value;
+    if (!todo || !canManageDialogAttachments.value) {
+      return;
+    }
+
+    const database = await options.getDatabase(todo.databaseId);
+    if (!database) {
+      throw new Error("Failed to open the todo database.");
+    }
+
+    options.busyAction.value = "Removing attachment";
+    options.error.value = null;
+
+    try {
+      await database.attachments.remove(todo.id, attachmentName);
+      attachmentUploadInputKey.value += 1;
+      await listAllTodos();
+      options.setSuccess(`Removed attachment ${attachmentName}.`);
+    } catch (removeError) {
+      options.error.value = readErrorMessage(removeError, "The attachment could not be removed.");
+      throw removeError;
+    } finally {
+      options.busyAction.value = null;
+    }
+  }
+
+  function canPreviewDialogAttachment(fileName: string, mimeType: string) {
+    return canPreviewAttachment(fileName, mimeType);
+  }
+
+  async function saveDialogTodo() {
     const nextSubject = draft.value.subject.trim();
     if (!nextSubject) {
       options.error.value = "A subject is required.";
@@ -219,32 +540,50 @@ export function useTodos(options: UseTodosOptions) {
 
     try {
       if (dialogMode.value === "create") {
-        if (!options.canCreate.value) {
+        const targetDatabaseId = draftDatabaseId.value ?? defaultDraftDatabaseId();
+        if (!targetDatabaseId) {
+          throw new Error("No target database is available for new todos.");
+        }
+
+        if (!(databaseInfoById.value[targetDatabaseId]?.capabilities.includes("create") ?? false)) {
           throw new Error("The selected database does not allow creating todos.");
         }
 
-        const created = await options.selectedDatabase.value.documents.create(buildTodoCreateInput({
+        const targetDatabase = await options.getDatabase(targetDatabaseId);
+        if (!targetDatabase) {
+          throw new Error("Failed to open the selected database.");
+        }
+
+        const created = await targetDatabase.documents.create(buildTodoCreateInput({
           ...draft.value,
           subject: nextSubject,
         }));
         await listAllTodos();
-        setSelectedTodoIds([created.id]);
+        setSelectedTodoIds([buildTodoSelectionKey(targetDatabaseId, created.id)]);
         options.setSuccess(`Created todo "${nextSubject}".`);
       } else {
-        if (!options.canUpdate.value || !dialogTodoId.value) {
+        const current = todos.value.find((todo) => todo.selectionKey === dialogTodoId.value) ?? null;
+        if (!current) {
+          throw new Error("The todo could not be found.");
+        }
+        if (!(databaseInfoById.value[current.databaseId]?.capabilities.includes("update") ?? false)) {
           throw new Error("The selected database does not allow updating todos.");
         }
 
-        const current = todos.value.find((todo) => todo.id === dialogTodoId.value) ?? null;
-        await options.selectedDatabase.value.documents.update(
-          dialogTodoId.value,
+        const targetDatabase = await options.getDatabase(current.databaseId);
+        if (!targetDatabase) {
+          throw new Error("Failed to open the todo database.");
+        }
+
+        await targetDatabase.documents.update(
+          current.id,
           buildTodoPatch(current, {
             ...draft.value,
             subject: nextSubject,
           }),
         );
         await listAllTodos();
-        setSelectedTodoIds([dialogTodoId.value]);
+        setSelectedTodoIds([current.selectionKey]);
         options.setSuccess(`Saved todo "${nextSubject}".`);
       }
 
@@ -258,17 +597,36 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   async function deleteTodos(todoIds: string[]) {
-    if (!options.selectedDatabase.value || !todoIds.length) {
+    if (!todoIds.length) {
       return;
-    }
-    if (!options.canDelete.value) {
-      throw new Error("The selected database does not allow deleting todos.");
     }
 
     options.busyAction.value = todoIds.length > 1 ? "Deleting todos" : "Deleting todo";
     options.error.value = null;
     try {
-      await Promise.all(todoIds.map((todoId) => options.selectedDatabase.value!.documents.delete(todoId)));
+      const todosToDelete = todoIds
+        .map((todoId) => todos.value.find((todo) => todo.selectionKey === todoId) ?? null)
+        .filter((todo): todo is TodoItem => Boolean(todo));
+
+      if (!todosToDelete.length) {
+        return;
+      }
+
+      const groupedTodos = new Map<string, TodoItem[]>();
+      for (const todo of todosToDelete) {
+        if (!(databaseInfoById.value[todo.databaseId]?.capabilities.includes("delete") ?? false)) {
+          throw new Error("One or more selected databases do not allow deleting todos.");
+        }
+        groupedTodos.set(todo.databaseId, [...(groupedTodos.get(todo.databaseId) ?? []), todo]);
+      }
+
+      await Promise.all(Array.from(groupedTodos.entries()).map(async ([databaseId, databaseTodos]) => {
+        const database = await options.getDatabase(databaseId);
+        if (!database) {
+          throw new Error("Failed to open one of the selected databases.");
+        }
+        await Promise.all(databaseTodos.map(async (todo) => await database.documents.delete(todo.id)));
+      }));
       await listAllTodos();
       clearSelection();
       options.setSuccess(todoIds.length > 1 ? `Deleted ${todoIds.length} todos.` : "Deleted todo.");
@@ -285,23 +643,42 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   async function moveTodos(todoIds: string[], quadrant: TodoQuadrant) {
-    if (!options.selectedDatabase.value || !todoIds.length) {
+    if (!todoIds.length) {
       return;
-    }
-    if (!options.canUpdate.value) {
-      throw new Error("The selected database does not allow updating todos.");
     }
 
     options.busyAction.value = todoIds.length > 1 ? "Moving todos" : "Moving todo";
     options.error.value = null;
     try {
-      await Promise.all(todoIds.map(async (todoId) => {
-        await options.selectedDatabase.value!.documents.update(todoId, {
-          set: {
-            quadrant,
-            updatedAt: new Date().toISOString(),
-          },
-        });
+      const todosToMove = todoIds
+        .map((todoId) => todos.value.find((todo) => todo.selectionKey === todoId) ?? null)
+        .filter((todo): todo is TodoItem => Boolean(todo));
+
+      if (!todosToMove.length) {
+        return;
+      }
+
+      const groupedTodos = new Map<string, TodoItem[]>();
+      for (const todo of todosToMove) {
+        if (!(databaseInfoById.value[todo.databaseId]?.capabilities.includes("update") ?? false)) {
+          throw new Error("One or more selected databases do not allow updating todos.");
+        }
+        groupedTodos.set(todo.databaseId, [...(groupedTodos.get(todo.databaseId) ?? []), todo]);
+      }
+
+      await Promise.all(Array.from(groupedTodos.entries()).map(async ([databaseId, databaseTodos]) => {
+        const database = await options.getDatabase(databaseId);
+        if (!database) {
+          throw new Error("Failed to open one of the selected databases.");
+        }
+        await Promise.all(databaseTodos.map(async (todo) => {
+          await database.documents.update(todo.id, {
+            set: {
+              quadrant,
+              updatedAt: new Date().toISOString(),
+            },
+          });
+        }));
       }));
       await listAllTodos();
       setSelectedTodoIds(todoIds);
@@ -317,6 +694,59 @@ export function useTodos(options: UseTodosOptions) {
 
   async function moveSelectedTodos(quadrant: TodoQuadrant) {
     await moveTodos(selectedTodoIds.value, quadrant);
+  }
+
+  async function setTodosCompleted(todoIds: string[], completed: boolean) {
+    if (!todoIds.length) {
+      return;
+    }
+
+    options.busyAction.value = completed ? "Completing todo" : "Reopening todo";
+    options.error.value = null;
+    try {
+      const todosToUpdate = todoIds
+        .map((todoId) => todos.value.find((todo) => todo.selectionKey === todoId) ?? null)
+        .filter((todo): todo is TodoItem => Boolean(todo));
+
+      if (!todosToUpdate.length) {
+        return;
+      }
+
+      const groupedTodos = new Map<string, TodoItem[]>();
+      for (const todo of todosToUpdate) {
+        if (!(databaseInfoById.value[todo.databaseId]?.capabilities.includes("update") ?? false)) {
+          throw new Error("One or more selected databases do not allow updating todos.");
+        }
+        groupedTodos.set(todo.databaseId, [...(groupedTodos.get(todo.databaseId) ?? []), todo]);
+      }
+
+      await Promise.all(Array.from(groupedTodos.entries()).map(async ([databaseId, databaseTodos]) => {
+        const database = await options.getDatabase(databaseId);
+        if (!database) {
+          throw new Error("Failed to open one of the selected databases.");
+        }
+        await Promise.all(databaseTodos.map(async (todo) => {
+          await database.documents.update(todo.id, {
+            set: {
+              completed,
+              updatedAt: new Date().toISOString(),
+            },
+          });
+        }));
+      }));
+      await listAllTodos();
+      setSelectedTodoIds(todoIds);
+      options.setSuccess(
+        completed
+          ? (todoIds.length > 1 ? `Marked ${todoIds.length} todos as completed.` : "Marked todo as completed.")
+          : (todoIds.length > 1 ? `Marked ${todoIds.length} todos as not completed.` : "Marked todo as not completed."),
+      );
+    } catch (error) {
+      options.error.value = readErrorMessage(error, "Failed to update the selected todos.");
+      throw error;
+    } finally {
+      options.busyAction.value = null;
+    }
   }
 
   function beginDrag(todoId: string) {
@@ -341,11 +771,23 @@ export function useTodos(options: UseTodosOptions) {
     dialogVisible,
     dialogMode,
     dialogTodoId,
+    draftDatabaseId,
+    dialogAttachments,
+    dialogDatabaseId,
+    dialogDatabaseInfo,
+    dialogDocumentId,
+    attachmentUploadInputKey,
     draft,
     searchQuery,
     filterMode,
     sortMode,
     activeMobileQuadrant,
+    createTargetDatabases,
+    canCreateAny,
+    canUpdateSelected,
+    canDeleteSelected,
+    canUseDialogAttachments,
+    canManageDialogAttachments,
     filteredTodos,
     todosByQuadrant,
     mobileTodos,
@@ -357,12 +799,24 @@ export function useTodos(options: UseTodosOptions) {
     openTodo,
     closeDialog,
     setDraft,
+    formatAttachmentSize,
     refreshTodos,
     saveDialogTodo,
     deleteTodos,
     deleteSelectedTodos,
     moveTodos,
     moveSelectedTodos,
+    setTodosCompleted,
+    canUseTodoAttachments,
+    canManageTodoAttachments,
+    uploadTodoAttachments,
+    uploadDialogAttachments,
+    previewDialogAttachment,
+    downloadDialogAttachment,
+    removeDialogAttachment,
+    canPreviewDialogAttachment,
+    getTodoAttachmentCount,
+    getTodoAttachmentTooltip,
     beginDrag,
     endDrag,
   };

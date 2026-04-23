@@ -1,4 +1,5 @@
 import type {
+  MindooDBAppAttachmentInfo,
   MindooDBAppDocument,
   MindooDBAppDocumentSummary,
 } from "mindoodb-app-sdk";
@@ -12,6 +13,7 @@ export type TodoFilterMode = "open" | "completed" | "all";
 
 export type TodoDraft = {
   subject: string;
+  assignedTo: string;
   description: string;
   quadrant: TodoQuadrant;
   dueAt: string | null;
@@ -21,6 +23,11 @@ export type TodoDraft = {
 
 export type TodoItem = TodoDraft & {
   id: string;
+  databaseId: string;
+  selectionKey: string;
+  /** Derived from `attachments.length`; kept for quick checks. */
+  attachmentCount: number;
+  attachments: MindooDBAppAttachmentInfo[];
   createdAt: string | null;
   updatedAt: string | null;
 };
@@ -40,12 +47,68 @@ export const TODO_QUADRANTS: TodoQuadrantDefinition[] = [
 
 export const EMPTY_TODO_DRAFT: TodoDraft = {
   subject: "",
+  assignedTo: "",
   description: "",
   quadrant: 1,
   dueAt: null,
   startAt: null,
   completed: false,
 };
+
+function asAttachmentString(value: unknown, fallback: string) {
+  return typeof value === "string" && value.trim() ? value : fallback;
+}
+
+function asAttachmentSize(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function normalizeSdkAttachmentList(attachments: readonly MindooDBAppAttachmentInfo[]) {
+  return attachments.map((attachment, index) => ({
+    attachmentId: asAttachmentString(attachment.attachmentId, `attachment-${index}`),
+    fileName: asAttachmentString(attachment.fileName, attachment.attachmentId || `attachment-${index}`),
+    mimeType: asAttachmentString(attachment.mimeType, "application/octet-stream"),
+    size: asAttachmentSize(attachment.size),
+  }));
+}
+
+/**
+ * Reads attachment metadata from the document JSON `data._attachments` array
+ * (same source as the Vega app and MindooDB server payload).
+ */
+export function readAttachmentsFromDocData(data: Record<string, unknown> | null | undefined) {
+  const raw = data?._attachments;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw.flatMap((entry, index) => {
+    if (!entry || typeof entry !== "object") {
+      return [];
+    }
+
+    const row = entry as Record<string, unknown>;
+    const attachmentId = asAttachmentString(row.attachmentId, `attachment-${index}`);
+    const fileName = asAttachmentString(row.fileName, attachmentId);
+    return [{
+      attachmentId,
+      fileName,
+      mimeType: asAttachmentString(row.mimeType, "application/octet-stream"),
+      size: asAttachmentSize(row.size),
+    } satisfies MindooDBAppAttachmentInfo];
+  });
+}
+
+function resolveAttachments(
+  document: Pick<MindooDBAppDocument, "data"> & { attachments?: readonly MindooDBAppAttachmentInfo[] | null },
+) {
+  const data = (document.data ?? {}) as Record<string, unknown>;
+  if (document.attachments && document.attachments.length > 0) {
+    return normalizeSdkAttachmentList(document.attachments);
+  }
+
+  return readAttachmentsFromDocData(data);
+}
 
 function normalizeQuadrant(value: unknown): TodoQuadrant {
   if (value === 2 || value === 3 || value === 4) {
@@ -70,6 +133,7 @@ function normalizeBoolean(value: unknown): boolean {
 export function readTodoDraft(data: Record<string, unknown> | null | undefined): TodoDraft {
   return {
     subject: normalizeText(data?.subject),
+    assignedTo: normalizeText(data?.assignedTo),
     description: normalizeText(data?.description),
     quadrant: normalizeQuadrant(data?.quadrant),
     dueAt: normalizeNullableIso(data?.dueAt),
@@ -80,17 +144,28 @@ export function readTodoDraft(data: Record<string, unknown> | null | undefined):
 
 export function readTodoItem(
   summary: MindooDBAppDocumentSummary | MindooDBAppDocument,
+  databaseId: string,
 ): TodoItem {
-  const data = summary.data ?? {};
+  const data = (summary.data ?? {}) as Record<string, unknown>;
   const draft = readTodoDraft(data);
   const createdAt = normalizeNullableIso(data.createdAt);
+  const attachments = resolveAttachments(summary as MindooDBAppDocument);
+  const attachmentCount = attachments.length;
 
   return {
     ...draft,
     id: summary.id,
+    databaseId,
+    selectionKey: buildTodoSelectionKey(databaseId, summary.id),
+    attachments,
+    attachmentCount,
     createdAt,
     updatedAt: normalizeNullableIso(summary.updatedAt) ?? normalizeNullableIso(data.updatedAt),
   };
+}
+
+export function buildTodoSelectionKey(databaseId: string, todoId: string) {
+  return `${databaseId}:${todoId}`;
 }
 
 export function buildTodoCreateInput(draft: TodoDraft) {
@@ -108,6 +183,7 @@ export function buildTodoCreateInput(draft: TodoDraft) {
 export function buildTodoPatch(current: TodoItem | null, draft: TodoDraft) {
   const set: Record<string, unknown> = {
     subject: draft.subject,
+    assignedTo: draft.assignedTo,
     description: draft.description,
     quadrant: draft.quadrant,
     dueAt: draft.dueAt,

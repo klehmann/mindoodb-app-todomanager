@@ -1,5 +1,6 @@
 import { createApp } from "vue";
 import PrimeVue from "primevue/config";
+import Tooltip from "primevue/tooltip";
 import ToastService from "primevue/toastservice";
 import "primeicons/primeicons.css";
 
@@ -14,6 +15,7 @@ app.use(PrimeVue, {
   theme: buildPrimeVueTheme(DEFAULT_THEME_PRESET),
 });
 app.use(ToastService);
+app.directive("tooltip", Tooltip);
 
 applyAppTheme();
 app.mount("#app");

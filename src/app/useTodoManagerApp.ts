@@ -23,8 +23,8 @@ export function useTodoManagerApp() {
   const session = ref<MindooDBAppSession | null>(null);
   const launchContext = ref<MindooDBAppLaunchContext | null>(null);
   const databases = ref<MindooDBAppDatabaseInfo[]>([]);
-  const selectedDatabase = ref<MindooDBAppDatabase | null>(null);
-  const selectedDatabaseId = ref<string | null>(null);
+  const openedDatabasesById = ref<Record<string, MindooDBAppDatabase>>({});
+  const selectedDatabaseIds = ref<string[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
   const successMessage = ref<string | null>(null);
@@ -44,16 +44,27 @@ export function useTodoManagerApp() {
     localViewportWidth.value = window.innerWidth;
   };
 
-  const selectedDatabaseInfo = computed(() =>
-    databases.value.find((entry) => entry.id === selectedDatabaseId.value) ?? null,
+  const databaseInfoById = computed<Record<string, MindooDBAppDatabaseInfo>>(() =>
+    Object.fromEntries(databases.value.map((entry) => [entry.id, entry])),
   );
-  const canRead = computed(() => selectedDatabaseInfo.value?.capabilities.includes("read") ?? false);
-  const canCreate = computed(() => selectedDatabaseInfo.value?.capabilities.includes("create") ?? false);
-  const canUpdate = computed(() => selectedDatabaseInfo.value?.capabilities.includes("update") ?? false);
-  const canDelete = computed(() => selectedDatabaseInfo.value?.capabilities.includes("delete") ?? false);
+  const selectedDatabaseInfos = computed(() =>
+    selectedDatabaseIds.value
+      .map((databaseId) => databaseInfoById.value[databaseId])
+      .filter((entry): entry is MindooDBAppDatabaseInfo => Boolean(entry)),
+  );
+  const selectedReadableDatabases = computed(() =>
+    selectedDatabaseInfos.value.filter((entry) => entry.capabilities.includes("read")),
+  );
+  const canRead = computed(() => selectedReadableDatabases.value.length > 0);
+  const canCreate = computed(() => databases.value.some((entry) => entry.capabilities.includes("create")));
   const isBusy = computed(() => loading.value || Boolean(busyAction.value));
   const viewportWidth = computed(() => hostViewport.value?.width ?? localViewportWidth.value);
   const isCompactViewport = computed(() => viewportWidth.value < 880);
+  const preferredDatabaseId = computed(() =>
+    launchContext.value?.preferredDatabaseId
+    ?? databases.value[0]?.id
+    ?? null,
+  );
 
   function setSuccess(message: string | null) {
     successMessage.value = message;
@@ -107,11 +118,10 @@ export function useTodoManagerApp() {
   }
 
   const todos = useTodos({
-    selectedDatabase,
-    canRead,
-    canCreate,
-    canUpdate,
-    canDelete,
+    selectedDatabaseIds,
+    databases,
+    preferredDatabaseId,
+    getDatabase: async (databaseId) => await openDatabaseById(databaseId),
     loading,
     busyAction,
     error,
@@ -138,14 +148,16 @@ export function useTodoManagerApp() {
       session.value = nextSession;
       launchContext.value = context;
       databases.value = context.databases;
+      openedDatabasesById.value = {};
       subscribeToHostEvents(nextSession, context);
 
-      const preferredDatabaseId = context.preferredDatabaseId
+      const initialDatabaseId = context.preferredDatabaseId
         ?? context.databases[0]?.id
         ?? null;
-      if (preferredDatabaseId) {
-        await selectDatabase(preferredDatabaseId);
+      if (initialDatabaseId) {
+        await selectDatabases([initialDatabaseId]);
       } else {
+        selectedDatabaseIds.value = [];
         await periodicSync.runSync("initial");
       }
     } catch (connectError) {
@@ -174,21 +186,48 @@ export function useTodoManagerApp() {
     }
   }
 
-  async function selectDatabase(databaseId: string) {
+  function normalizeDatabaseSelection(databaseIds: string[]) {
+    const knownDatabaseIds = new Set(databases.value.map((entry) => entry.id));
+    return Array.from(new Set(databaseIds)).filter((databaseId) => knownDatabaseIds.has(databaseId));
+  }
+
+  async function openDatabaseById(databaseId: string) {
+    if (!session.value) {
+      return null;
+    }
+
+    const existing = openedDatabasesById.value[databaseId];
+    if (existing) {
+      return existing;
+    }
+
+    const openedDatabase = await session.value.openDatabase(databaseId);
+    openedDatabasesById.value = {
+      ...openedDatabasesById.value,
+      [databaseId]: openedDatabase,
+    };
+    return openedDatabase;
+  }
+
+  async function selectDatabases(databaseIds: string[]) {
     if (!session.value) {
       return;
     }
+
+    const nextDatabaseIds = normalizeDatabaseSelection(databaseIds);
 
     loading.value = true;
     error.value = null;
     setSuccess(null);
 
     try {
-      selectedDatabaseId.value = databaseId;
-      selectedDatabase.value = await session.value.openDatabase(databaseId);
+      await Promise.all(nextDatabaseIds.map(async (databaseId) => {
+        await openDatabaseById(databaseId);
+      }));
+      selectedDatabaseIds.value = nextDatabaseIds;
       await todos.refreshTodos();
     } catch (databaseError) {
-      error.value = readErrorMessage(databaseError, "Failed to load the selected database.");
+      error.value = readErrorMessage(databaseError, "Failed to load the selected databases.");
       throw databaseError;
     } finally {
       loading.value = false;
@@ -221,6 +260,7 @@ export function useTodoManagerApp() {
   });
 
   return {
+    session,
     loading,
     error,
     successMessage,
@@ -228,13 +268,13 @@ export function useTodoManagerApp() {
     isBusy,
     launchContext,
     databases,
-    selectedDatabase,
-    selectedDatabaseId,
-    selectedDatabaseInfo,
+    openedDatabasesById,
+    selectedDatabaseIds,
+    selectedDatabaseInfos,
+    selectedReadableDatabases,
+    preferredDatabaseId,
     canRead,
     canCreate,
-    canUpdate,
-    canDelete,
     hostTheme,
     hostViewport,
     hostUiPreferences,
@@ -245,7 +285,7 @@ export function useTodoManagerApp() {
     viewportWidth,
     isCompactViewport,
     connect,
-    selectDatabase,
+    selectDatabases,
     refreshNow,
     setRefreshMode: periodicSync.setRefreshMode,
     setMobileQuadrant,

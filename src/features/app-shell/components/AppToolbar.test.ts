@@ -23,6 +23,21 @@ const MenubarStub = defineComponent({
   `,
 });
 
+const MultiSelectStub = defineComponent({
+  props: {
+    modelValue: {
+      type: Array,
+      required: false,
+      default: () => [],
+    },
+  },
+  template: `<div class="multiselect-stub">{{ modelValue.join(",") }}</div>`,
+});
+
+const DialogStub = defineComponent({
+  template: `<div class="dialog-stub"><slot /></div>`,
+});
+
 function createAppStub() {
   return {
     hostUiPreferences: ref({ iosMultitaskingOptimized: true }),
@@ -32,11 +47,11 @@ function createAppStub() {
     searchQuery: ref(""),
     filterMode: ref<TodoFilterMode>("open"),
     sortMode: ref<TodoSortMode>("updated-desc"),
-    selectedDatabaseId: ref("main"),
+    selectedDatabaseIds: ref(["main"]),
     databases: ref([{ id: "main", title: "Main" }]),
-    canCreate: ref(true),
-    canUpdate: ref(true),
-    canDelete: ref(true),
+    canCreateAny: ref(true),
+    canUpdateSelected: ref(true),
+    canDeleteSelected: ref(true),
     isBusy: ref(false),
     selectedCount: ref(0),
     selectedQuadrants: ref<number[]>([]),
@@ -51,7 +66,7 @@ function createAppStub() {
     endDrag: vi.fn(),
     setRefreshMode: vi.fn(),
     setMobileQuadrant: vi.fn(),
-    selectDatabase: vi.fn().mockResolvedValue(undefined),
+    selectDatabases: vi.fn().mockResolvedValue(undefined),
   } as any;
 }
 
@@ -64,6 +79,8 @@ describe("AppToolbar", () => {
       global: {
         stubs: {
           Menubar: MenubarStub,
+          MultiSelect: MultiSelectStub,
+          Dialog: DialogStub,
         },
       },
     });
@@ -80,6 +97,8 @@ describe("AppToolbar", () => {
       global: {
         stubs: {
           Menubar: MenubarStub,
+          MultiSelect: MultiSelectStub,
+          Dialog: DialogStub,
         },
       },
     });
