@@ -7,7 +7,7 @@ import Tag from "primevue/tag";
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
 import type { TodoItem, TodoQuadrantDefinition } from "@/features/todos/composables/todoTypes";
 
-const TOUCH_CONTEXT_MENU_DELAY_MS = 420;
+const TOUCH_CONTEXT_MENU_DELAY_MS = 700;
 const TOUCH_CONTEXT_MENU_MOVE_TOLERANCE = 10;
 
 const props = defineProps<{
