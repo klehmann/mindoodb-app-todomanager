@@ -2,6 +2,7 @@
 import { computed } from "vue";
 
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
+import TodoDragGhost from "./TodoDragGhost.vue";
 import TodoQuadrant from "./TodoQuadrant.vue";
 import { quadrantDefinition } from "@/features/todos/composables/todoTypes";
 
@@ -20,6 +21,7 @@ const activeDefinition = computed(() => quadrantDefinition(props.app.activeMobil
       :todos="app.mobileTodos.value"
       compact
     />
+    <TodoDragGhost :app="app" />
   </section>
 </template>
 
