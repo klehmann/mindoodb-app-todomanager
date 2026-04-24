@@ -95,7 +95,6 @@ describe("TodoQuadrant", () => {
       clientY: 40,
     });
 
-    expect(app.selectTodo).toHaveBeenCalledWith("main:todo-1");
     expect(contextMenuHide).toHaveBeenCalled();
     expect(contextMenuShow).toHaveBeenCalled();
   });
@@ -314,6 +313,28 @@ describe("TodoQuadrant", () => {
     });
 
     expect(wrapper.find(".todo-card__attachment").exists()).toBe(true);
+  });
+
+  it("does not render selection checkboxes anymore", () => {
+    const app = createAppStub();
+    const wrapper = mount(TodoQuadrant, {
+      props: {
+        app,
+        definition: {
+          quadrant: 1,
+          title: "Due Soon",
+          subtitle: "Important",
+        },
+        todos: [todo],
+      },
+      global: {
+        stubs: {
+          ContextMenu: ContextMenuStub,
+        },
+      },
+    });
+
+    expect(wrapper.find('input[type="checkbox"]').exists()).toBe(false);
   });
 
   it("marks a todo as completed from the context menu action", async () => {

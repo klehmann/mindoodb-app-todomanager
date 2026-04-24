@@ -40,10 +40,6 @@ function refreshModeIcon(mode: TodoSyncMode) {
   return props.app.refreshMode.value === mode ? "pi pi-check" : undefined;
 }
 
-async function handleRecycle() {
-  await props.app.deleteSelectedTodos();
-}
-
 async function handleManualRefresh() {
   await props.app.refreshNow();
 }
@@ -81,33 +77,6 @@ const menuItems = computed<MenuItem[]>(() => [
     command: () => {
       props.app.startCreateTodo(props.app.activeMobileQuadrant.value);
     },
-  },
-  {
-    label: "Selection",
-    icon: "pi pi-list-check",
-    items: [
-      ...TODO_QUADRANTS.map((entry) => ({
-        label: `Move to Q${entry.quadrant}`,
-        icon: props.app.selectedQuadrants.value.length === 1 && props.app.selectedQuadrants.value[0] === entry.quadrant
-          ? "pi pi-check"
-          : undefined,
-        disabled: !props.app.selectedCount.value || !props.app.canUpdateSelected.value,
-        command: () => {
-          void props.app.moveSelectedTodos(entry.quadrant);
-        },
-      })),
-      {
-        separator: true,
-      },
-      {
-        label: "Delete selected",
-        icon: "pi pi-trash",
-        disabled: !props.app.selectedCount.value || !props.app.canDeleteSelected.value,
-        command: () => {
-          void handleRecycle();
-        },
-      },
-    ],
   },
   {
     label: "Sync",

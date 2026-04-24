@@ -18,7 +18,6 @@ const props = defineProps<{
 }>();
 
 let lastBackgroundTouchTimestamp = 0;
-let suppressTouchMenuClickUntil = 0;
 let suppressContextDismissUntil = 0;
 let touchContextMenuTimer: number | null = null;
 const touchContextMenuState = ref<{
@@ -68,18 +67,6 @@ function formatDateRange(startAt: string | null, dueAt: string | null) {
   }
 
   return startLabel ?? dueLabel;
-}
-
-function handleCardClick(todoId: string, event: MouseEvent) {
-  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-  if (props.app.shouldSuppressTodoCardClick?.() || now < suppressTouchMenuClickUntil) {
-    return;
-  }
-  props.app.selectTodo(todoId, event.metaKey || event.ctrlKey);
-}
-
-function handleCheckboxClick(todoId: string) {
-  props.app.selectTodo(todoId, true);
 }
 
 function dataTransferHasFiles(event: DragEvent): boolean {
@@ -319,8 +306,6 @@ async function openHostedContextMenu(event: MouseEvent, todo: TodoItem) {
 }
 
 async function showTodoContextMenu(todo: TodoItem, event: MouseEvent) {
-  props.app.selectTodo(todo.selectionKey);
-
   if (canUseHostedContextMenu.value) {
     const openedHostedMenu = await openHostedContextMenu(event, todo);
     if (openedHostedMenu) {
@@ -374,7 +359,6 @@ function armTouchContextMenu(todo: TodoItem, event: PointerEvent) {
       return;
     }
     const now = typeof performance !== "undefined" ? performance.now() : Date.now();
-    suppressTouchMenuClickUntil = now + 450;
     suppressContextDismissUntil = now + 450;
     void showTodoContextMenu(current.todo, createSyntheticContextMenuEvent(current.clientX, current.clientY));
     resetTouchContextMenuState();
@@ -509,12 +493,10 @@ onBeforeUnmount(() => {
         :key="todo.selectionKey"
         class="todo-card"
         :class="{
-          'todo-card--selected': props.app.isSelected(todo.selectionKey),
           'todo-card--completed': todo.completed,
           'todo-card--dragging': props.app.draggedTodoIds.value.includes(todo.selectionKey),
           'todo-card--file-drop-target': fileDropTargetTodoKey === todo.selectionKey,
         }"
-        @click="handleCardClick(todo.selectionKey, $event)"
         @dblclick="props.app.openTodo(todo.selectionKey)"
         @contextmenu.stop="handleTodoContextMenu(todo, $event)"
         @pointerdown="handleTodoPointerDown(todo, $event)"
@@ -523,16 +505,6 @@ onBeforeUnmount(() => {
         @dragleave="handleTodoFileDragLeave(todo, $event)"
         @drop="handleTodoFileDrop(todo, $event)"
       >
-        <div class="todo-card__check">
-          <input
-            :checked="props.app.isSelected(todo.selectionKey)"
-            type="checkbox"
-            aria-label="Select todo"
-            @pointerdown.stop
-            @click.stop="handleCheckboxClick(todo.selectionKey)"
-          />
-        </div>
-
         <div class="todo-card__body">
           <div class="todo-card__title-row">
             <strong>{{ todo.subject || "Untitled todo" }}</strong>
@@ -662,7 +634,7 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   background: color-mix(in srgb, rgb(var(--primary-rgb)) 22%, var(--bg));
   border: 1px solid rgb(255 255 255 / 0.12);
-  color: rgb(var(--primary-rgb));
+  color: var(--quadrant-badge-fg, rgb(var(--primary-rgb)));
   font-weight: 700;
   text-shadow:
     0 0 1px rgb(255 255 255 / 0.35),
@@ -681,8 +653,8 @@ onBeforeUnmount(() => {
 
 .todo-card {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.45rem;
   padding: 0.8rem 0.9rem;
   border: 1px solid var(--border);
   border-radius: 1rem;
@@ -703,13 +675,6 @@ onBeforeUnmount(() => {
   border-color: var(--border-strong);
 }
 
-.todo-card--selected {
-  border-color: var(--border-strong);
-  background:
-    linear-gradient(135deg, rgb(var(--primary-rgb) / 0.22), rgb(var(--accent-rgb) / 0.16)),
-    var(--bg-elevated);
-}
-
 .todo-card--completed {
   opacity: 0.76;
 }
@@ -723,10 +688,6 @@ onBeforeUnmount(() => {
   background:
     linear-gradient(135deg, rgb(var(--primary-rgb) / 0.22), rgb(var(--primary-rgb) / 0.1)),
     var(--bg-elevated);
-}
-
-.todo-card__check {
-  padding-top: 0.12rem;
 }
 
 .todo-card__body {

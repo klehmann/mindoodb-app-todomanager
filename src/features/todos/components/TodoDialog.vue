@@ -99,29 +99,55 @@ function handleAttachmentDrop(event: DragEvent) {
   void props.app.uploadDialogAttachments(files);
 }
 
+function copyWithTextareaFallback(value: string) {
+  if (typeof document === "undefined") {
+    return false;
+  }
+
+  const textarea = document.createElement("textarea");
+  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.setAttribute("aria-hidden", "true");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  textarea.style.left = "-9999px";
+  textarea.style.opacity = "0";
+
+  document.body.append(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+
+  try {
+    return document.execCommand("copy");
+  } finally {
+    textarea.remove();
+    activeElement?.focus();
+  }
+}
+
 async function copyInfoValue(value: string, label: string) {
   if (!value) {
     return;
   }
 
   try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-    } else {
-      const input = document.createElement("textarea");
-      input.value = value;
-      input.setAttribute("readonly", "true");
-      input.style.position = "absolute";
-      input.style.left = "-9999px";
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand("copy");
-      input.remove();
+    if (copyWithTextareaFallback(value)) {
+      copiedInfoLabel.value = `${label} copied.`;
+      return;
     }
-    copiedInfoLabel.value = `${label} copied.`;
+
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value);
+      copiedInfoLabel.value = `${label} copied.`;
+      return;
+    }
   } catch {
-    copiedInfoLabel.value = `Unable to copy ${label.toLowerCase()}.`;
+    // Fall through to the shared failure message below.
   }
+
+  copiedInfoLabel.value = `Unable to copy ${label.toLowerCase()}.`;
 }
 </script>
 
@@ -338,7 +364,6 @@ async function copyInfoValue(value: string, label: string) {
             <section class="dialog-panel glass-card">
               <div class="dialog-panel__header">
                 <div>
-                  <p class="dialog-panel__eyebrow">Info</p>
                   <h3>Identifiers</h3>
                 </div>
               </div>
@@ -407,7 +432,7 @@ async function copyInfoValue(value: string, label: string) {
           </select>
         </div>
 
-        <Button label="Close" text @click="props.app.closeDialog()" />
+        <Button class="dialog-footer__close" label="Close" text @click="props.app.closeDialog()" />
         <Button
           :label="props.app.dialogMode.value === 'create' ? 'Create' : 'Save'"
           icon="pi pi-check"
@@ -435,6 +460,11 @@ async function copyInfoValue(value: string, label: string) {
 .dialog-tabs {
   display: grid;
   gap: 1rem;
+}
+
+.dialog-tabs :deep(.p-tab[aria-selected="true"]),
+.dialog-tabs :deep(.p-tab[aria-selected="true"] .p-tab-title) {
+  color: var(--quadrant-badge-fg, rgb(var(--primary-rgb)));
 }
 
 .dialog-general {
@@ -590,6 +620,19 @@ async function copyInfoValue(value: string, label: string) {
 
 .dialog-footer :deep(.p-button) {
   flex-shrink: 0;
+}
+
+.dialog-footer :deep(.dialog-footer__close),
+.dialog-footer :deep(.dialog-footer__close .p-button-label),
+.dialog-footer :deep(.dialog-footer__close .p-button-icon) {
+  color: var(--quadrant-badge-fg, rgb(var(--primary-rgb)));
+}
+
+.dialog-shell :deep(.p-button.p-button-text:not(.p-button-danger):not(.p-button-primary) .p-button-label),
+.dialog-shell :deep(.p-button.p-button-text:not(.p-button-danger):not(.p-button-primary) .p-button-icon),
+.dialog-shell :deep(.p-button.p-button-secondary .p-button-label),
+.dialog-shell :deep(.p-button.p-button-secondary .p-button-icon) {
+  color: var(--quadrant-badge-fg, rgb(var(--primary-rgb)));
 }
 
 @media (max-width: 720px) {

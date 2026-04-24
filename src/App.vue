@@ -54,10 +54,6 @@ onMounted(() => {
   void app.connect();
 });
 
-async function handleFooterRecycleClick() {
-  await app.deleteSelectedTodos();
-}
-
 async function handleFooterRecycleDrop(event: DragEvent) {
   event.preventDefault();
   await app.deleteTodos(app.draggedTodoIds.value);
@@ -118,15 +114,12 @@ async function handleFooterRecycleDrop(event: DragEvent) {
           Work from 1 to 4. Do the <em>ugliest</em> thing first. :-)
         </span>
       </div>
-      <button
-        type="button"
+      <div
         class="footer-bar__recycle"
         :class="{ 'footer-bar__recycle--drag-hover': app.todoPointerDragState.hoverRecycle && app.todoPointerDragState.active }"
         data-todo-drop-target="recycle"
-        :disabled="!app.selectedCount.value && !app.draggedTodoIds.value.length"
-        aria-label="Recycle bin — delete selected todos"
-        title="Delete selected (or drop todos here)"
-        @click="handleFooterRecycleClick"
+        aria-label="Recycle bin — drop todos here to delete them"
+        title="Drop todos here to delete them"
         @dragover.prevent
         @drop="handleFooterRecycleDrop"
       >
@@ -137,7 +130,7 @@ async function handleFooterRecycleDrop(event: DragEvent) {
           height="256"
           alt=""
         />
-      </button>
+      </div>
     </footer>
 
     <TodoDialog :app="app" />
@@ -238,7 +231,7 @@ async function handleFooterRecycleDrop(event: DragEvent) {
   border: 0;
   border-radius: 0;
   background: transparent;
-  cursor: pointer;
+  cursor: default;
   transition: transform 160ms ease, filter 160ms ease, opacity 160ms ease;
 }
 
@@ -255,10 +248,5 @@ async function handleFooterRecycleDrop(event: DragEvent) {
 .footer-bar__recycle--drag-hover {
   transform: scale(1.05);
   filter: drop-shadow(0 8px 20px rgb(var(--primary-rgb) / 0.28));
-}
-
-.footer-bar__recycle:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 </style>
