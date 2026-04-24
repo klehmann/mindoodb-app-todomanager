@@ -676,6 +676,7 @@ onBeforeUnmount(() => {
   gap: 0.7rem;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .todo-card {
@@ -690,6 +691,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  touch-action: none;
   transition:
     transform 160ms ease,
     border-color 160ms ease,
