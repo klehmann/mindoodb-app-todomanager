@@ -405,15 +405,25 @@ const menuItems = computed<MenuItem[]>(() => [
   gap: 0.45rem;
   min-height: 2.9rem;
   padding: 0.7rem 0.95rem;
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
   border-radius: 1rem;
-  background: rgb(255 255 255 / 0.03);
-  color: inherit;
+  background: color-mix(in srgb, var(--bg) 64%, transparent);
+  box-shadow:
+    0 1px 0 rgb(255 255 255 / 0.07),
+    0 10px 28px rgb(0 0 0 / 0.2);
+  color: var(--text);
+  font-weight: 700;
+  text-shadow:
+    0 0 1px rgb(255 255 255 / 0.3),
+    0 1px 1px rgb(0 0 0 / 0.48),
+    0 1px 6px rgb(0 0 0 / 0.18);
 }
 
 .toolbar__mobile-quadrant--active {
   border-color: var(--border-strong);
-  background: rgb(var(--primary-rgb) / 0.14);
+  background:
+    linear-gradient(135deg, rgb(var(--primary-rgb) / 0.14), rgb(var(--accent-rgb) / 0.08)),
+    color-mix(in srgb, var(--bg) 64%, transparent);
 }
 
 .toolbar__mobile-quadrant--drag-hover {
