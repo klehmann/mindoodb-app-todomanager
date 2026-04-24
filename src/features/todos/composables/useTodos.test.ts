@@ -265,30 +265,27 @@ describe("useTodos", () => {
     });
 
     const PointerCtor = (window.PointerEvent ?? window.MouseEvent) as typeof MouseEvent;
+    const touchPointerDownInit = {
+      button: 0,
+      pointerId: 7,
+      pointerType: "touch",
+      clientX: 12,
+      clientY: 16,
+    } as MouseEventInit & { pointerId: number; pointerType: string };
+    const touchPointerMoveInit = {
+      pointerId: 7,
+      pointerType: "touch",
+      clientX: 44,
+      clientY: 64,
+    } as MouseEventInit & { pointerId: number; pointerType: string };
 
     result.handleTodoPointerDown(
       "main:todo-1",
-      new PointerCtor("pointerdown", {
-        button: 0,
-        pointerId: 7,
-        pointerType: "touch",
-        clientX: 12,
-        clientY: 16,
-      }) as PointerEvent,
+      new PointerCtor("pointerdown", touchPointerDownInit) as PointerEvent,
     );
 
-    document.dispatchEvent(new PointerCtor("pointermove", {
-      pointerId: 7,
-      pointerType: "touch",
-      clientX: 44,
-      clientY: 64,
-    }));
-    document.dispatchEvent(new PointerCtor("pointerup", {
-      pointerId: 7,
-      pointerType: "touch",
-      clientX: 44,
-      clientY: 64,
-    }));
+    document.dispatchEvent(new PointerCtor("pointermove", touchPointerMoveInit));
+    document.dispatchEvent(new PointerCtor("pointerup", touchPointerMoveInit));
 
     await vi.waitFor(() => {
       expect(mainDatabase.documents.update).toHaveBeenCalledWith("todo-1", expect.objectContaining({
