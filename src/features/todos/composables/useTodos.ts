@@ -315,6 +315,9 @@ export function useTodos(options: UseTodosOptions) {
         event.clientY - todoPointerDragState.startY,
       );
       if (distance >= DRAG_START_DISTANCE) {
+        if (event.pointerType === "touch" && event.cancelable) {
+          event.preventDefault();
+        }
         startTodoPointerDrag(event.clientX, event.clientY);
       }
       return;
