@@ -84,8 +84,6 @@ function addTodoToSearchIndex(index: Document<TodoSearchDocument>, todo: TodoIte
 }
 
 const DRAG_START_DISTANCE = 10;
-const LONG_PRESS_DELAY_MS = 240;
-const LONG_PRESS_MOVE_TOLERANCE = 10;
 
 export interface UseTodosOptions {
   selectedDatabaseIds: Ref<string[]>;
@@ -113,9 +111,6 @@ export function useTodos(options: UseTodosOptions) {
     y: 0,
     hoverQuadrant: null as TodoQuadrant | null,
     hoverRecycle: false,
-    longPressArmed: false,
-    longPressArmX: 0,
-    longPressArmY: 0,
   });
   const selectedTodoIds = ref<string[]>([]);
   const draggedTodoIds = ref<string[]>([]);
@@ -238,15 +233,7 @@ export function useTodos(options: UseTodosOptions) {
     transform: `translate(${todoPointerDragState.x + 12}px, ${todoPointerDragState.y + 12}px)`,
   }));
 
-  let todoLongPressTimer: number | null = null;
   let suppressTodoClickUntil = 0;
-
-  function clearTodoLongPressTimer() {
-    if (todoLongPressTimer !== null) {
-      window.clearTimeout(todoLongPressTimer);
-      todoLongPressTimer = null;
-    }
-  }
 
   function updateTodoDropTarget(clientX: number, clientY: number) {
     if (typeof document === "undefined") {
@@ -265,7 +252,6 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   function resetTodoPointerDrag() {
-    clearTodoLongPressTimer();
     if (todoPointerDragState.active) {
       endDrag();
     }
@@ -280,16 +266,12 @@ export function useTodos(options: UseTodosOptions) {
     todoPointerDragState.y = 0;
     todoPointerDragState.hoverQuadrant = null;
     todoPointerDragState.hoverRecycle = false;
-    todoPointerDragState.longPressArmed = false;
-    todoPointerDragState.longPressArmX = 0;
-    todoPointerDragState.longPressArmY = 0;
   }
 
   function startTodoPointerDrag(clientX: number, clientY: number) {
     if (!todoPointerDragState.todoId || todoPointerDragState.started) {
       return;
     }
-    clearTodoLongPressTimer();
     todoPointerDragState.active = true;
     todoPointerDragState.started = true;
     todoPointerDragState.x = clientX;
@@ -317,20 +299,6 @@ export function useTodos(options: UseTodosOptions) {
     todoPointerDragState.y = event.clientY;
     todoPointerDragState.hoverQuadrant = null;
     todoPointerDragState.hoverRecycle = false;
-    todoPointerDragState.longPressArmed = false;
-
-    if (event.pointerType === "touch") {
-      clearTodoLongPressTimer();
-      todoLongPressTimer = window.setTimeout(() => {
-        if (!todoPointerDragState.todoId || todoPointerDragState.todoId !== todoId || todoPointerDragState.started) {
-          return;
-        }
-        todoPointerDragState.longPressArmed = true;
-        todoPointerDragState.longPressArmX = todoPointerDragState.x;
-        todoPointerDragState.longPressArmY = todoPointerDragState.y;
-        todoLongPressTimer = null;
-      }, LONG_PRESS_DELAY_MS);
-    }
   }
 
   function handleTodoPointerMove(event: PointerEvent) {
@@ -341,7 +309,7 @@ export function useTodos(options: UseTodosOptions) {
     todoPointerDragState.x = event.clientX;
     todoPointerDragState.y = event.clientY;
 
-    if (!todoPointerDragState.started && todoPointerDragState.pointerType !== "touch") {
+    if (!todoPointerDragState.started) {
       const distance = Math.hypot(
         event.clientX - todoPointerDragState.startX,
         event.clientY - todoPointerDragState.startY,
@@ -352,28 +320,10 @@ export function useTodos(options: UseTodosOptions) {
       return;
     }
 
-    if (!todoPointerDragState.started && todoPointerDragState.pointerType === "touch") {
-      if (!todoPointerDragState.longPressArmed) {
-        if (Math.hypot(
-          event.clientX - todoPointerDragState.startX,
-          event.clientY - todoPointerDragState.startY,
-        ) > LONG_PRESS_MOVE_TOLERANCE) {
-          clearTodoLongPressTimer();
-        }
-        return;
-      }
-
-      const armedDistance = Math.hypot(
-        event.clientX - todoPointerDragState.longPressArmX,
-        event.clientY - todoPointerDragState.longPressArmY,
-      );
-      if (armedDistance >= DRAG_START_DISTANCE) {
-        startTodoPointerDrag(event.clientX, event.clientY);
-      }
-      return;
-    }
-
     if (todoPointerDragState.active) {
+      if (event.pointerType === "touch" && event.cancelable) {
+        event.preventDefault();
+      }
       updateTodoDropTarget(event.clientX, event.clientY);
     }
   }
@@ -1007,7 +957,6 @@ export function useTodos(options: UseTodosOptions) {
     document.removeEventListener("pointermove", handleTodoPointerMove);
     document.removeEventListener("pointerup", handleTodoPointerUp);
     document.removeEventListener("pointercancel", handleTodoPointerCancel);
-    clearTodoLongPressTimer();
   });
 
   return {

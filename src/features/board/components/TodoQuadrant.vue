@@ -7,6 +7,9 @@ import Tag from "primevue/tag";
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
 import type { TodoItem, TodoQuadrantDefinition } from "@/features/todos/composables/todoTypes";
 
+const TOUCH_CONTEXT_MENU_DELAY_MS = 420;
+const TOUCH_CONTEXT_MENU_MOVE_TOLERANCE = 10;
+
 const props = defineProps<{
   app: ReturnType<typeof useTodoManagerApp>;
   definition: TodoQuadrantDefinition;
@@ -15,6 +18,17 @@ const props = defineProps<{
 }>();
 
 let lastBackgroundTouchTimestamp = 0;
+let suppressTouchMenuClickUntil = 0;
+let suppressContextDismissUntil = 0;
+let touchContextMenuTimer: number | null = null;
+const touchContextMenuState = ref<{
+  todo: TodoItem;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  clientX: number;
+  clientY: number;
+} | null>(null);
 const localContextMenuRef = ref<{ show: (event: MouseEvent) => void; hide: () => void } | null>(null);
 const contextMenuTodo = ref<TodoItem | null>(null);
 const fileDropTargetTodoKey = ref<string | null>(null);
@@ -57,7 +71,8 @@ function formatDateRange(startAt: string | null, dueAt: string | null) {
 }
 
 function handleCardClick(todoId: string, event: MouseEvent) {
-  if (props.app.shouldSuppressTodoCardClick?.()) {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (props.app.shouldSuppressTodoCardClick?.() || now < suppressTouchMenuClickUntil) {
     return;
   }
   props.app.selectTodo(todoId, event.metaKey || event.ctrlKey);
@@ -135,6 +150,27 @@ function handleTodoFileDrop(todo: TodoItem, event: DragEvent) {
 
 function getHostedMenuApi() {
   return props.app.session.value?.menus ?? null;
+}
+
+function clearTouchContextMenuTimer() {
+  if (touchContextMenuTimer !== null) {
+    window.clearTimeout(touchContextMenuTimer);
+    touchContextMenuTimer = null;
+  }
+}
+
+function resetTouchContextMenuState() {
+  clearTouchContextMenuTimer();
+  touchContextMenuState.value = null;
+}
+
+function createSyntheticContextMenuEvent(clientX: number, clientY: number) {
+  return new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX,
+    clientY,
+  });
 }
 
 async function hideHostedContextMenu() {
@@ -282,21 +318,7 @@ async function openHostedContextMenu(event: MouseEvent, todo: TodoItem) {
   }
 }
 
-function openLocalContextMenu(event: MouseEvent, todo: TodoItem) {
-  contextMenuTodo.value = todo;
-  localContextMenuRef.value?.hide();
-  localContextMenuRef.value?.show(event);
-}
-
-function dismissContextMenu() {
-  contextMenuTodo.value = null;
-  localContextMenuRef.value?.hide();
-  void hideHostedContextMenu();
-}
-
-async function handleTodoContextMenu(todo: TodoItem, event: MouseEvent) {
-  event.preventDefault();
-  event.stopPropagation();
+async function showTodoContextMenu(todo: TodoItem, event: MouseEvent) {
   props.app.selectTodo(todo.selectionKey);
 
   if (canUseHostedContextMenu.value) {
@@ -307,6 +329,89 @@ async function handleTodoContextMenu(todo: TodoItem, event: MouseEvent) {
   }
 
   openLocalContextMenu(event, todo);
+}
+
+function openLocalContextMenu(event: MouseEvent, todo: TodoItem) {
+  contextMenuTodo.value = todo;
+  localContextMenuRef.value?.hide();
+  localContextMenuRef.value?.show(event);
+}
+
+function dismissContextMenu() {
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+  if (now < suppressContextDismissUntil) {
+    return;
+  }
+  contextMenuTodo.value = null;
+  localContextMenuRef.value?.hide();
+  void hideHostedContextMenu();
+}
+
+async function handleTodoContextMenu(todo: TodoItem, event: MouseEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+  await showTodoContextMenu(todo, event);
+}
+
+function armTouchContextMenu(todo: TodoItem, event: PointerEvent) {
+  if (event.pointerType !== "touch") {
+    resetTouchContextMenuState();
+    return;
+  }
+
+  clearTouchContextMenuTimer();
+  touchContextMenuState.value = {
+    todo,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    clientX: event.clientX,
+    clientY: event.clientY,
+  };
+  touchContextMenuTimer = window.setTimeout(() => {
+    const current = touchContextMenuState.value;
+    if (!current || props.app.todoPointerDragState.started || props.app.todoPointerDragState.active) {
+      return;
+    }
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    suppressTouchMenuClickUntil = now + 450;
+    suppressContextDismissUntil = now + 450;
+    void showTodoContextMenu(current.todo, createSyntheticContextMenuEvent(current.clientX, current.clientY));
+    resetTouchContextMenuState();
+  }, TOUCH_CONTEXT_MENU_DELAY_MS);
+}
+
+function handleTodoPointerDown(todo: TodoItem, event: PointerEvent) {
+  props.app.handleTodoPointerDown(todo.selectionKey, event);
+  armTouchContextMenu(todo, event);
+}
+
+function updateTouchContextMenuGesture(event: PointerEvent) {
+  const current = touchContextMenuState.value;
+  if (!current || current.pointerId !== event.pointerId) {
+    return;
+  }
+
+  current.clientX = event.clientX;
+  current.clientY = event.clientY;
+
+  if (props.app.todoPointerDragState.started || props.app.todoPointerDragState.active) {
+    resetTouchContextMenuState();
+    return;
+  }
+
+  const distance = Math.hypot(event.clientX - current.startX, event.clientY - current.startY);
+  if (distance > TOUCH_CONTEXT_MENU_MOVE_TOLERANCE) {
+    resetTouchContextMenuState();
+  }
+}
+
+function handleTouchContextMenuPointerFinish(event: PointerEvent) {
+  const current = touchContextMenuState.value;
+  if (!current || current.pointerId !== event.pointerId) {
+    return;
+  }
+  resetTouchContextMenuState();
 }
 
 function isBackgroundInteractionTarget(target: EventTarget | null) {
@@ -346,11 +451,15 @@ function handleBackgroundPointerUp(event: PointerEvent) {
 
 onBeforeUnmount(() => {
   clearTodoFileDragState();
+  resetTouchContextMenuState();
   dismissContextMenu();
 });
 
 onMounted(() => {
   document.addEventListener("click", dismissContextMenu);
+  document.addEventListener("pointermove", updateTouchContextMenuGesture);
+  document.addEventListener("pointerup", handleTouchContextMenuPointerFinish);
+  document.addEventListener("pointercancel", handleTouchContextMenuPointerFinish);
   document.addEventListener("scroll", dismissContextMenu, true);
   document.addEventListener("drop", clearTodoFileDragState, true);
   document.addEventListener("dragend", clearTodoFileDragState, true);
@@ -358,6 +467,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("click", dismissContextMenu);
+  document.removeEventListener("pointermove", updateTouchContextMenuGesture);
+  document.removeEventListener("pointerup", handleTouchContextMenuPointerFinish);
+  document.removeEventListener("pointercancel", handleTouchContextMenuPointerFinish);
   document.removeEventListener("scroll", dismissContextMenu, true);
   document.removeEventListener("drop", clearTodoFileDragState, true);
   document.removeEventListener("dragend", clearTodoFileDragState, true);
@@ -405,7 +517,7 @@ onBeforeUnmount(() => {
         @click="handleCardClick(todo.selectionKey, $event)"
         @dblclick="props.app.openTodo(todo.selectionKey)"
         @contextmenu.stop="handleTodoContextMenu(todo, $event)"
-        @pointerdown="props.app.handleTodoPointerDown(todo.selectionKey, $event)"
+        @pointerdown="handleTodoPointerDown(todo, $event)"
         @dragenter="handleTodoFileDragEnter(todo, $event)"
         @dragover="handleTodoFileDragOver(todo, $event)"
         @dragleave="handleTodoFileDragLeave(todo, $event)"

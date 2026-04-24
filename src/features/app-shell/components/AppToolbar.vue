@@ -310,6 +310,10 @@ const menuItems = computed<MenuItem[]>(() => [
         Double click the background of a quadrant on desktop, or double tap it on touch devices, to create a
         new todo with that quadrant preselected.
       </p>
+      <p>
+        On touch devices, drag a todo directly to another quadrant target or to the recycle bin, and long press
+        a todo to open its context menu.
+      </p>
     </div>
   </Dialog>
 </template>

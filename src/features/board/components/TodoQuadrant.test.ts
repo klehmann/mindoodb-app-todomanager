@@ -42,6 +42,7 @@ function createAppStub(selectedIds: string[] = []) {
     todoPointerDragState: reactive({
       hoverQuadrant: null as number | null,
       active: false,
+      started: false,
     }),
     handleTodoPointerDown: vi.fn(),
     shouldSuppressTodoCardClick: vi.fn(() => false),
