@@ -90,6 +90,7 @@ export interface UseTodosOptions {
   databases: Ref<MindooDBAppDatabaseInfo[]>;
   preferredDatabaseId: ComputedRef<string | null>;
   getDatabase: (databaseId: string) => Promise<MindooDBAppDatabase | null>;
+  isTimeTravelActive?: ComputedRef<boolean>;
   loading: Ref<boolean>;
   busyAction: Ref<string | null>;
   error: Ref<string | null>;
@@ -125,12 +126,18 @@ export function useTodos(options: UseTodosOptions) {
   const filterMode = ref<TodoFilterMode>("open");
   const sortMode = ref<TodoSortMode>("updated-desc");
   const activeMobileQuadrant = ref<TodoQuadrant>(1);
+  const isTimeTravelActive = computed(() => options.isTimeTravelActive?.value ?? false);
+  function assertWritable() {
+    if (isTimeTravelActive.value) {
+      throw new Error("Time travel mode is read-only.");
+    }
+  }
   const databaseInfoById = computed<Record<string, MindooDBAppDatabaseInfo>>(() =>
     Object.fromEntries(options.databases.value.map((entry) => [entry.id, entry])),
   );
-  const createTargetDatabases = computed(() => options.databases.value);
+  const createTargetDatabases = computed(() => isTimeTravelActive.value ? [] : options.databases.value);
   const canCreateAny = computed(() =>
-    createTargetDatabases.value.some((entry) => entry.capabilities.includes("create")),
+    !isTimeTravelActive.value && createTargetDatabases.value.some((entry) => entry.capabilities.includes("create")),
   );
   const currentDialogTodo = computed(() =>
     dialogTodoId.value
@@ -157,23 +164,25 @@ export function useTodos(options: UseTodosOptions) {
   );
   const canUpdateSelected = computed(() =>
     selectedTodos.value.length > 0
+    && !isTimeTravelActive.value
     && selectedTodos.value.every((todo) =>
       databaseInfoById.value[todo.databaseId]?.capabilities.includes("update") ?? false,
     ),
   );
   const canDeleteSelected = computed(() =>
     selectedTodos.value.length > 0
+    && !isTimeTravelActive.value
     && selectedTodos.value.every((todo) =>
       databaseInfoById.value[todo.databaseId]?.capabilities.includes("delete") ?? false,
     ),
   );
   const canUseDialogAttachments = computed(() =>
-    dialogDatabaseId.value
+    dialogDatabaseId.value && !isTimeTravelActive.value
       ? databaseInfoById.value[dialogDatabaseId.value]?.capabilities.includes("attachments") ?? false
       : false,
   );
   const canManageDialogAttachments = computed(() =>
-    dialogDatabaseId.value
+    dialogDatabaseId.value && !isTimeTravelActive.value
       ? (databaseInfoById.value[dialogDatabaseId.value]?.capabilities.includes("attachments") ?? false)
         && (databaseInfoById.value[dialogDatabaseId.value]?.capabilities.includes("update") ?? false)
       : false,
@@ -580,6 +589,7 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   async function uploadTodoAttachments(todoKey: string | null, fileList: FileList | readonly File[] | null) {
+    assertWritable();
     const todo = findTodoBySelectionKey(todoKey);
     const files = fileList ? Array.from(fileList) : [];
     if (!todo || !files.length) {
@@ -688,6 +698,7 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   async function removeDialogAttachment(attachmentName: string) {
+    assertWritable();
     const todo = currentDialogTodo.value;
     if (!todo || !canManageDialogAttachments.value) {
       return;
@@ -719,6 +730,7 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   async function saveDialogTodo() {
+    assertWritable();
     const nextSubject = draft.value.subject.trim();
     if (!nextSubject) {
       options.error.value = "A subject is required.";
@@ -787,6 +799,7 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   async function deleteTodos(todoIds: string[]) {
+    assertWritable();
     if (!todoIds.length) {
       return;
     }
@@ -833,6 +846,7 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   async function moveTodos(todoIds: string[], quadrant: TodoQuadrant) {
+    assertWritable();
     if (!todoIds.length) {
       return;
     }
@@ -887,6 +901,7 @@ export function useTodos(options: UseTodosOptions) {
   }
 
   async function setTodosCompleted(todoIds: string[], completed: boolean) {
+    assertWritable();
     if (!todoIds.length) {
       return;
     }

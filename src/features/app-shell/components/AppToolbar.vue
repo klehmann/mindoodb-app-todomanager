@@ -85,6 +85,7 @@ const menuItems = computed<MenuItem[]>(() => [
       {
         label: "Refresh now",
         icon: "pi pi-refresh",
+        disabled: props.app.isTimeTravelActive.value,
         command: () => {
           void handleManualRefresh();
         },
@@ -99,6 +100,7 @@ const menuItems = computed<MenuItem[]>(() => [
       {
         label: "Every 10 seconds",
         icon: refreshModeIcon("10s"),
+        disabled: props.app.isTimeTravelActive.value,
         command: () => {
           props.app.setRefreshMode("10s");
         },
@@ -106,6 +108,7 @@ const menuItems = computed<MenuItem[]>(() => [
       {
         label: "Every 30 seconds",
         icon: refreshModeIcon("30s"),
+        disabled: props.app.isTimeTravelActive.value,
         command: () => {
           props.app.setRefreshMode("30s");
         },
@@ -113,6 +116,7 @@ const menuItems = computed<MenuItem[]>(() => [
       {
         label: "Every 60 seconds",
         icon: refreshModeIcon("60s"),
+        disabled: props.app.isTimeTravelActive.value,
         command: () => {
           props.app.setRefreshMode("60s");
         },
@@ -209,6 +213,13 @@ const menuItems = computed<MenuItem[]>(() => [
           </div>
         </template>
       </Menubar>
+      <span
+        v-if="props.app.isTimeTravelActive.value"
+        class="toolbar__time-travel"
+        :title="`Read-only as of ${props.app.timeTravelDateLabel.value}`"
+      >
+        Time travel: {{ props.app.timeTravelDateLabel.value }}
+      </span>
     </div>
 
     <Transition name="toolbar-search-panel">
@@ -353,6 +364,18 @@ const menuItems = computed<MenuItem[]>(() => [
 
 .toolbar__sync-indicator i {
   filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.35));
+}
+
+.toolbar__time-travel {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid rgb(var(--primary-rgb) / 0.35);
+  border-radius: 999px;
+  margin: 0.35rem 0 0 0.45rem;
+  padding: 0.22rem 0.55rem;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .toolbar__subrow {

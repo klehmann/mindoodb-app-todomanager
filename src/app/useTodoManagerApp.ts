@@ -55,8 +55,12 @@ export function useTodoManagerApp() {
   const selectedReadableDatabases = computed(() =>
     selectedDatabaseInfos.value.filter((entry) => entry.capabilities.includes("read")),
   );
+  const isTimeTravelActive = computed(() => launchContext.value?.timeTravelDate != null);
+  const timeTravelDateLabel = computed(() =>
+    launchContext.value?.timeTravelDate == null ? "" : new Date(launchContext.value.timeTravelDate).toLocaleString(),
+  );
   const canRead = computed(() => selectedReadableDatabases.value.length > 0);
-  const canCreate = computed(() => databases.value.some((entry) => entry.capabilities.includes("create")));
+  const canCreate = computed(() => !isTimeTravelActive.value && databases.value.some((entry) => entry.capabilities.includes("create")));
   const isBusy = computed(() => loading.value || Boolean(busyAction.value));
   const viewportWidth = computed(() => hostViewport.value?.width ?? localViewportWidth.value);
   const isCompactViewport = computed(() => viewportWidth.value < 880);
@@ -122,6 +126,7 @@ export function useTodoManagerApp() {
     databases,
     preferredDatabaseId,
     getDatabase: async (databaseId) => await openDatabaseById(databaseId),
+    isTimeTravelActive,
     loading,
     busyAction,
     error,
@@ -273,6 +278,8 @@ export function useTodoManagerApp() {
     selectedDatabaseInfos,
     selectedReadableDatabases,
     preferredDatabaseId,
+    isTimeTravelActive,
+    timeTravelDateLabel,
     canRead,
     canCreate,
     hostTheme,

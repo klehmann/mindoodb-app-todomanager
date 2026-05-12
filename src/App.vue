@@ -56,6 +56,9 @@ onMounted(() => {
 
 async function handleFooterRecycleDrop(event: DragEvent) {
   event.preventDefault();
+  if (app.isTimeTravelActive.value) {
+    return;
+  }
   await app.deleteTodos(app.draggedTodoIds.value);
   app.endDrag();
 }

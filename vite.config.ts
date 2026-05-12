@@ -9,6 +9,7 @@ function createResolveAliases() {
 
   if (process.env.LOCAL_MINDOODB === "1") {
     aliases["mindoodb-app-sdk"] = fileURLToPath(new URL("../mindoodb-app-sdk/src/index.ts", import.meta.url));
+    aliases["mindoodb-view-language"] = fileURLToPath(new URL("../mindoodb-view-language/src/index.ts", import.meta.url));
   }
 
   return aliases;
