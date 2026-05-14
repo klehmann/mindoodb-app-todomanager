@@ -43,10 +43,10 @@ watch(
 
 function canAcceptAttachmentDrop() {
   return Boolean(
-    props.app.dialogMode.value === "edit"
-      && props.app.dialogTodoId.value
-      && props.app.canManageDialogAttachments.value
-      && !props.app.isBusy.value,
+    props.app.dialogMode.value === "edit" &&
+    props.app.dialogTodoId.value &&
+    props.app.canManageDialogAttachments.value &&
+    !props.app.isBusy.value,
   );
 }
 
@@ -105,7 +105,10 @@ function copyWithTextareaFallback(value: string) {
   }
 
   const textarea = document.createElement("textarea");
-  const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const activeElement =
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
   textarea.value = value;
   textarea.setAttribute("readonly", "true");
   textarea.setAttribute("aria-hidden", "true");
@@ -155,7 +158,11 @@ async function copyInfoValue(value: string, label: string) {
   <Dialog
     v-model:visible="props.app.dialogVisible.value"
     modal
-    :header="props.app.dialogMode.value === 'create' ? 'New To Do Entry' : 'To Do Entry'"
+    :header="
+      props.app.dialogMode.value === 'create'
+        ? 'New To Do Entry'
+        : 'To Do Entry'
+    "
     :style="{ width: '44rem', maxWidth: '96vw' }"
   >
     <div class="dialog-shell">
@@ -176,7 +183,12 @@ async function copyInfoValue(value: string, label: string) {
                   class="native-input"
                   type="text"
                   placeholder="Todo subject"
-                  @input="props.app.setDraft('subject', ($event.target as HTMLInputElement).value)"
+                  @input="
+                    props.app.setDraft(
+                      'subject',
+                      ($event.target as HTMLInputElement).value,
+                    )
+                  "
                 />
               </label>
 
@@ -187,7 +199,12 @@ async function copyInfoValue(value: string, label: string) {
                   class="native-input"
                   type="text"
                   placeholder="Who owns this todo?"
-                  @input="props.app.setDraft('assignedTo', ($event.target as HTMLInputElement).value)"
+                  @input="
+                    props.app.setDraft(
+                      'assignedTo',
+                      ($event.target as HTMLInputElement).value,
+                    )
+                  "
                 />
               </label>
 
@@ -197,14 +214,24 @@ async function copyInfoValue(value: string, label: string) {
                   <select
                     class="native-select"
                     :value="String(props.app.draft.value.quadrant)"
-                    @change="props.app.setDraft('quadrant', Number(($event.target as HTMLSelectElement).value) as 1 | 2 | 3 | 4)"
+                    @change="
+                      props.app.setDraft(
+                        'quadrant',
+                        Number(($event.target as HTMLSelectElement).value) as
+                          | 1
+                          | 2
+                          | 3
+                          | 4,
+                      )
+                    "
                   >
                     <option
                       v-for="entry in TODO_QUADRANTS"
                       :key="entry.quadrant"
                       :value="entry.quadrant"
                     >
-                      Q{{ entry.quadrant }} - {{ entry.subtitle }} / {{ entry.title }}
+                      Q{{ entry.quadrant }} - {{ entry.subtitle }} /
+                      {{ entry.title }}
                     </option>
                   </select>
                 </label>
@@ -215,7 +242,14 @@ async function copyInfoValue(value: string, label: string) {
                     :value="toDateInput(props.app.draft.value.dueAt)"
                     class="native-input"
                     type="date"
-                    @input="props.app.setDraft('dueAt', fromDateInput(($event.target as HTMLInputElement).value))"
+                    @input="
+                      props.app.setDraft(
+                        'dueAt',
+                        fromDateInput(
+                          ($event.target as HTMLInputElement).value,
+                        ),
+                      )
+                    "
                   />
                 </label>
 
@@ -225,7 +259,14 @@ async function copyInfoValue(value: string, label: string) {
                     :value="toDateInput(props.app.draft.value.startAt)"
                     class="native-input"
                     type="date"
-                    @input="props.app.setDraft('startAt', fromDateInput(($event.target as HTMLInputElement).value))"
+                    @input="
+                      props.app.setDraft(
+                        'startAt',
+                        fromDateInput(
+                          ($event.target as HTMLInputElement).value,
+                        ),
+                      )
+                    "
                   />
                 </label>
               </div>
@@ -236,7 +277,12 @@ async function copyInfoValue(value: string, label: string) {
                   :value="props.app.draft.value.description"
                   class="native-textarea"
                   placeholder="Describe the todo"
-                  @input="props.app.setDraft('description', ($event.target as HTMLTextAreaElement).value)"
+                  @input="
+                    props.app.setDraft(
+                      'description',
+                      ($event.target as HTMLTextAreaElement).value,
+                    )
+                  "
                 />
               </label>
 
@@ -244,7 +290,9 @@ async function copyInfoValue(value: string, label: string) {
                 <Checkbox
                   binary
                   :model-value="props.app.draft.value.completed"
-                  @update:model-value="props.app.setDraft('completed', Boolean($event))"
+                  @update:model-value="
+                    props.app.setDraft('completed', Boolean($event))
+                  "
                 />
                 <span>Completed</span>
               </label>
@@ -254,31 +302,50 @@ async function copyInfoValue(value: string, label: string) {
           <TabPanel value="attachments">
             <section
               class="dialog-panel glass-card attachments-panel"
-              :class="{ 'attachments-panel--drag-active': attachmentDragActive }"
+              :class="{
+                'attachments-panel--drag-active': attachmentDragActive,
+              }"
               @dragenter="handleAttachmentDragEnter"
               @dragover="handleAttachmentDragOver"
               @dragleave="handleAttachmentDragLeave"
               @drop="handleAttachmentDrop"
             >
-              <div class="dialog-panel__header">
+              <div class="dialog-panel__header attachments-panel__header">
                 <div>
-                  <p class="dialog-panel__eyebrow">Attachments</p>
-                  <h3>Files</h3>
+                  <h3>Attachments</h3>
                 </div>
-                <label
-                  class="upload-button"
-                  :class="{ 'upload-button--disabled': !props.app.canManageDialogAttachments.value || props.app.isBusy.value }"
-                >
-                  <input
-                    :key="props.app.attachmentUploadInputKey.value"
-                    class="sr-only"
-                    type="file"
-                    multiple
-                    :disabled="!props.app.canManageDialogAttachments.value || props.app.isBusy.value"
-                    @change="handleUpload"
+                <div class="attachments-panel__controls">
+                  <label
+                    class="upload-button"
+                    :class="{
+                      'upload-button--disabled':
+                        !props.app.canManageDialogAttachments.value ||
+                        props.app.isBusy.value,
+                    }"
+                  >
+                    <input
+                      :key="props.app.attachmentUploadInputKey.value"
+                      class="sr-only"
+                      type="file"
+                      multiple
+                      :disabled="
+                        !props.app.canManageDialogAttachments.value ||
+                        props.app.isBusy.value
+                      "
+                      @change="handleUpload"
+                    />
+                    <span>Upload</span>
+                  </label>
+                  <Button
+                    label="Scan document"
+                    severity="secondary"
+                    :disabled="
+                      !props.app.canManageDialogAttachments.value ||
+                      props.app.isBusy.value
+                    "
+                    @click="props.app.scanDialogAttachment"
                   />
-                  <span>Upload</span>
-                </label>
+                </div>
               </div>
 
               <p
@@ -294,7 +361,10 @@ async function copyInfoValue(value: string, label: string) {
                 Attachment actions are unavailable for this database binding.
               </p>
               <p
-                v-else-if="props.app.canManageDialogAttachments.value && !props.app.isBusy.value"
+                v-else-if="
+                  props.app.canManageDialogAttachments.value &&
+                  !props.app.isBusy.value
+                "
                 class="attachments-panel__hint"
               >
                 Drop files here to attach them to this todo.
@@ -311,7 +381,10 @@ async function copyInfoValue(value: string, label: string) {
                 >
                   <div class="attachment-item__details">
                     <strong>{{ attachment.fileName }}</strong>
-                    <p>{{ attachment.mimeType }} · {{ props.app.formatAttachmentSize(attachment.size) }}</p>
+                    <p>
+                      {{ attachment.mimeType }} ·
+                      {{ props.app.formatAttachmentSize(attachment.size) }}
+                    </p>
                   </div>
                   <div class="attachment-item__actions">
                     <Button
@@ -322,11 +395,16 @@ async function copyInfoValue(value: string, label: string) {
                       :aria-label="`Preview ${attachment.fileName}`"
                       :title="`Preview ${attachment.fileName}`"
                       :disabled="
-                        !props.app.canUseDialogAttachments.value
-                        || !props.app.canPreviewDialogAttachment(attachment.fileName, attachment.mimeType)
-                        || props.app.isBusy.value
+                        !props.app.canUseDialogAttachments.value ||
+                        !props.app.canPreviewDialogAttachment(
+                          attachment.fileName,
+                          attachment.mimeType,
+                        ) ||
+                        props.app.isBusy.value
                       "
-                      @click="props.app.previewDialogAttachment(attachment.fileName)"
+                      @click="
+                        props.app.previewDialogAttachment(attachment.fileName)
+                      "
                     />
                     <Button
                       icon="pi pi-download"
@@ -335,8 +413,13 @@ async function copyInfoValue(value: string, label: string) {
                       severity="secondary"
                       :aria-label="`Extract ${attachment.fileName}`"
                       :title="`Extract ${attachment.fileName}`"
-                      :disabled="!props.app.canUseDialogAttachments.value || props.app.isBusy.value"
-                      @click="props.app.downloadDialogAttachment(attachment.fileName)"
+                      :disabled="
+                        !props.app.canUseDialogAttachments.value ||
+                        props.app.isBusy.value
+                      "
+                      @click="
+                        props.app.downloadDialogAttachment(attachment.fileName)
+                      "
                     />
                     <Button
                       icon="pi pi-trash"
@@ -345,14 +428,22 @@ async function copyInfoValue(value: string, label: string) {
                       severity="danger"
                       :aria-label="`Remove ${attachment.fileName}`"
                       :title="`Remove ${attachment.fileName}`"
-                      :disabled="!props.app.canManageDialogAttachments.value || props.app.isBusy.value"
-                      @click="props.app.removeDialogAttachment(attachment.fileName)"
+                      :disabled="
+                        !props.app.canManageDialogAttachments.value ||
+                        props.app.isBusy.value
+                      "
+                      @click="
+                        props.app.removeDialogAttachment(attachment.fileName)
+                      "
                     />
                   </div>
                 </article>
               </div>
               <p
-                v-else-if="props.app.dialogMode.value === 'edit' && props.app.canUseDialogAttachments.value"
+                v-else-if="
+                  props.app.dialogMode.value === 'edit' &&
+                  props.app.canUseDialogAttachments.value
+                "
                 class="panel__empty"
               >
                 No attachments are stored for this todo.
@@ -372,28 +463,42 @@ async function copyInfoValue(value: string, label: string) {
                 <div class="dialog-info-row">
                   <div class="dialog-info-copy">
                     <span class="field__label">Database id</span>
-                    <code class="dialog-info-value">{{ props.app.dialogDatabaseId.value ?? "-" }}</code>
+                    <code class="dialog-info-value">{{
+                      props.app.dialogDatabaseId.value ?? "-"
+                    }}</code>
                   </div>
                   <Button
                     label="Copy"
                     text
                     size="small"
                     :disabled="!props.app.dialogDatabaseId.value"
-                    @click="copyInfoValue(props.app.dialogDatabaseId.value ?? '', 'Database id')"
+                    @click="
+                      copyInfoValue(
+                        props.app.dialogDatabaseId.value ?? '',
+                        'Database id',
+                      )
+                    "
                   />
                 </div>
 
                 <div class="dialog-info-row">
                   <div class="dialog-info-copy">
                     <span class="field__label">Document id</span>
-                    <code class="dialog-info-value">{{ props.app.dialogDocumentId.value ?? "-" }}</code>
+                    <code class="dialog-info-value">{{
+                      props.app.dialogDocumentId.value ?? "-"
+                    }}</code>
                   </div>
                   <Button
                     label="Copy"
                     text
                     size="small"
                     :disabled="!props.app.dialogDocumentId.value"
-                    @click="copyInfoValue(props.app.dialogDocumentId.value ?? '', 'Document id')"
+                    @click="
+                      copyInfoValue(
+                        props.app.dialogDocumentId.value ?? '',
+                        'Document id',
+                      )
+                    "
                   />
                 </div>
               </div>
@@ -404,7 +509,9 @@ async function copyInfoValue(value: string, label: string) {
               >
                 {{ props.app.dialogDatabaseInfo.value.title }}
               </p>
-              <p v-if="copiedInfoLabel" class="field__hint">{{ copiedInfoLabel }}</p>
+              <p v-if="copiedInfoLabel" class="field__hint">
+                {{ copiedInfoLabel }}
+              </p>
             </section>
           </TabPanel>
         </TabPanels>
@@ -414,12 +521,18 @@ async function copyInfoValue(value: string, label: string) {
     <template #footer>
       <div class="dialog-footer">
         <div class="dialog-footer__create-target">
-          <span>{{ props.app.dialogMode.value === 'create' ? 'Create in' : 'Stored in' }}</span>
+          <span>{{
+            props.app.dialogMode.value === "create" ? "Create in" : "Stored in"
+          }}</span>
           <select
             :value="props.app.draftDatabaseId.value ?? ''"
             class="native-select"
             :disabled="props.app.dialogMode.value !== 'create'"
-            @change="props.app.draftDatabaseId.value = ($event.target as HTMLSelectElement).value"
+            @change="
+              props.app.draftDatabaseId.value = (
+                $event.target as HTMLSelectElement
+              ).value
+            "
           >
             <option
               v-for="database in props.app.createTargetDatabases.value"
@@ -427,23 +540,35 @@ async function copyInfoValue(value: string, label: string) {
               :value="database.id"
               :disabled="!database.capabilities.includes('create')"
             >
-              {{ database.title }}{{ database.capabilities.includes('create') ? '' : ' (read only)' }}
+              {{ database.title
+              }}{{
+                database.capabilities.includes("create") ? "" : " (read only)"
+              }}
             </option>
           </select>
         </div>
 
-        <Button class="dialog-footer__close" label="Close" text @click="props.app.closeDialog()" />
+        <Button
+          class="dialog-footer__close"
+          label="Close"
+          text
+          @click="props.app.closeDialog()"
+        />
         <Button
           :label="props.app.dialogMode.value === 'create' ? 'Create' : 'Save'"
           icon="pi pi-check"
           :disabled="
-            props.app.dialogMode.value === 'create'
-            && !props.app.createTargetDatabases.value.some(
+            props.app.dialogMode.value === 'create' &&
+            !props.app.createTargetDatabases.value.some(
               (database) =>
-                database.id === props.app.draftDatabaseId.value && database.capabilities.includes('create'),
+                database.id === props.app.draftDatabaseId.value &&
+                database.capabilities.includes('create'),
             )
           "
-          :loading="props.app.busyAction.value === 'Creating todo' || props.app.busyAction.value === 'Saving todo'"
+          :loading="
+            props.app.busyAction.value === 'Creating todo' ||
+            props.app.busyAction.value === 'Saving todo'
+          "
           @click="props.app.saveDialogTodo()"
         />
       </div>
@@ -511,6 +636,17 @@ async function copyInfoValue(value: string, label: string) {
   text-transform: uppercase;
 }
 
+.attachments-panel__header {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.attachments-panel__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .attachments-panel--drag-active {
   border: 1px dashed rgb(var(--primary-rgb));
   background: rgb(var(--primary-rgb) / 0.08);
@@ -576,6 +712,18 @@ async function copyInfoValue(value: string, label: string) {
   cursor: not-allowed;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .dialog-info-stack {
   display: grid;
   gap: 0.85rem;
@@ -628,8 +776,16 @@ async function copyInfoValue(value: string, label: string) {
   color: var(--quadrant-badge-fg, rgb(var(--primary-rgb)));
 }
 
-.dialog-shell :deep(.p-button.p-button-text:not(.p-button-danger):not(.p-button-primary) .p-button-label),
-.dialog-shell :deep(.p-button.p-button-text:not(.p-button-danger):not(.p-button-primary) .p-button-icon),
+.dialog-shell
+  :deep(
+    .p-button.p-button-text:not(.p-button-danger):not(.p-button-primary)
+      .p-button-label
+  ),
+.dialog-shell
+  :deep(
+    .p-button.p-button-text:not(.p-button-danger):not(.p-button-primary)
+      .p-button-icon
+  ),
 .dialog-shell :deep(.p-button.p-button-secondary .p-button-label),
 .dialog-shell :deep(.p-button.p-button-secondary .p-button-icon) {
   color: var(--quadrant-badge-fg, rgb(var(--primary-rgb)));
