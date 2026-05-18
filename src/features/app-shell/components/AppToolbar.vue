@@ -315,7 +315,7 @@ const menuItems = computed<MenuItem[]>(() => [
   backdrop-filter: blur(26px);
 }
 
-.toolbar--ios-multitasking :deep(.p-menubar-button) {
+.toolbar--ios-multitasking .toolbar__new-todo {
   margin-left: 80px;
 }
 
