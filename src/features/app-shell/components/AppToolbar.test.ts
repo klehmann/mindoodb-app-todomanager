@@ -45,6 +45,8 @@ function createAppStub() {
     canCreateAny: ref(true),
     canUpdateSelected: ref(true),
     canDeleteSelected: ref(true),
+    isTimeTravelActive: ref(false),
+    timeTravelDateLabel: ref(""),
     isBusy: ref(false),
     selectedCount: ref(0),
     selectedQuadrants: ref<number[]>([]),
@@ -115,6 +117,32 @@ describe("AppToolbar", () => {
     app.syncState.value = "idle";
     await nextTick();
     expect(wrapper.find(".toolbar__sync-indicator").exists()).toBe(false);
+  });
+
+  it("keeps the new todo action visible outside the collapsible menubar", async () => {
+    const app = createAppStub();
+    app.isCompactViewport.value = true;
+    const wrapper = mount(AppToolbar, {
+      props: {
+        app,
+      },
+      global: {
+        stubs: {
+          Menubar: MenubarStub,
+          Dialog: DialogStub,
+        },
+      },
+    });
+
+    const newTodoButton = wrapper.find(".toolbar__new-todo");
+    expect(newTodoButton.exists()).toBe(true);
+    expect(newTodoButton.text()).toContain("New todo");
+
+    const menuItems = wrapper.findComponent(MenubarStub).props("model") as any[];
+    expect(menuItems.some((item) => item.label === "New todo")).toBe(false);
+
+    await newTodoButton.trigger("click");
+    expect(app.startCreateTodo).toHaveBeenCalledWith(1);
   });
 
   it("hides search by default and toggles it from Sources", async () => {

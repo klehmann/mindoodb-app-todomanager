@@ -12,8 +12,10 @@ import AppToolbar from "@/features/app-shell/components/AppToolbar.vue";
 import TodoBoard from "@/features/board/components/TodoBoard.vue";
 import TodoMobileBoard from "@/features/board/components/TodoMobileBoard.vue";
 import TodoDialog from "@/features/todos/components/TodoDialog.vue";
+import { useTodoManagerAppUpdate } from "@/pwa/appUpdate";
 
 const app = useTodoManagerApp();
+const appUpdate = useTodoManagerAppUpdate();
 const toast = useToast();
 
 watch(
@@ -67,11 +69,28 @@ async function handleFooterRecycleDrop(event: DragEvent) {
 <template>
   <AppBackground v-if="app.databases.value.length" />
   <main class="app-shell">
-    <Toast group="todo-bottom" position="bottom-center" />
+    <Toast group="todo-bottom" position="bottom-center" class="app-shell__toast" />
     <AppToolbar
       v-if="app.databases.value.length"
       :app="app"
+      class="app-shell__toolbar"
     />
+    <Message
+      v-if="appUpdate.updateAvailable.value"
+      severity="info"
+      :closable="false"
+      class="app-shell__update-banner"
+    >
+      <span>A new version of To Do Manager is available.</span>
+      <button
+        type="button"
+        class="app-shell__reload-button"
+        :disabled="appUpdate.updateReloading.value"
+        @click="appUpdate.reloadForUpdate"
+      >
+        {{ appUpdate.updateReloading.value ? "Reloading..." : "Reload now" }}
+      </button>
+    </Message>
 
     <section class="content-shell glass-card glass-card--frost glass-card--frost-tinted">
       <div
@@ -145,7 +164,7 @@ async function handleFooterRecycleDrop(event: DragEvent) {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   gap: 2px;
   margin: 0 auto;
   max-width: 100%;
@@ -153,7 +172,46 @@ async function handleFooterRecycleDrop(event: DragEvent) {
   padding: 2px;
 }
 
+.app-shell__toast {
+  position: fixed;
+}
+
+.app-shell__toolbar {
+  grid-row: 1;
+}
+
+.app-shell__update-banner {
+  grid-row: 2;
+  margin: 0;
+}
+
+.app-shell__update-banner :deep(.p-message-content) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.app-shell__reload-button {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.45rem 0.8rem;
+  background: rgb(var(--primary-rgb));
+  color: white;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.app-shell__reload-button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
 .content-shell {
+  grid-row: 3;
   min-height: 0;
   padding: 0.95rem;
 }
@@ -172,6 +230,7 @@ async function handleFooterRecycleDrop(event: DragEvent) {
 }
 
 .footer-bar {
+  grid-row: 4;
   position: sticky;
   bottom: 2px;
   z-index: 10;

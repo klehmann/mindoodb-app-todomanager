@@ -69,15 +69,11 @@ function toggleSearchPanel() {
   searchPanelVisible.value = !searchPanelVisible.value;
 }
 
+function createTodo() {
+  props.app.startCreateTodo(props.app.activeMobileQuadrant.value);
+}
+
 const menuItems = computed<MenuItem[]>(() => [
-  {
-    label: "New todo",
-    icon: "pi pi-plus",
-    disabled: !props.app.canCreateAny.value || props.app.isBusy.value,
-    command: () => {
-      props.app.startCreateTodo(props.app.activeMobileQuadrant.value);
-    },
-  },
   {
     label: "Sync",
     icon: "pi pi-cloud",
@@ -201,6 +197,15 @@ const menuItems = computed<MenuItem[]>(() => [
     :class="{ 'toolbar--ios-multitasking': props.app.hostUiPreferences.value.iosMultitaskingOptimized }"
   >
     <div class="toolbar__menu-row">
+      <button
+        type="button"
+        class="toolbar__new-todo"
+        :disabled="!props.app.canCreateAny.value || props.app.isBusy.value"
+        @click="createTodo"
+      >
+        <i class="pi pi-plus" aria-hidden="true" />
+        <span>New todo</span>
+      </button>
       <Menubar :model="menuItems" class="toolbar__menubar">
         <template #end>
           <div
@@ -315,6 +320,9 @@ const menuItems = computed<MenuItem[]>(() => [
 }
 
 .toolbar__menu-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   padding: 0.45rem 0.65rem 0.52rem;
   border-radius: 0.85rem;
   background: color-mix(in srgb, var(--bg) 64%, transparent);
@@ -324,7 +332,38 @@ const menuItems = computed<MenuItem[]>(() => [
     0 10px 28px rgb(0 0 0 / 0.2);
 }
 
+.toolbar__new-todo {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  border: 0;
+  border-radius: 0.8rem;
+  padding: 0.5rem 0.8rem;
+  background: rgb(var(--primary-rgb) / 0.16);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  text-shadow:
+    0 0 1px rgb(255 255 255 / 0.3),
+    0 1px 1px rgb(0 0 0 / 0.45),
+    0 1px 6px rgb(0 0 0 / 0.16);
+}
+
+.toolbar__new-todo:hover:not(:disabled) {
+  background: rgb(var(--primary-rgb) / 0.24);
+}
+
+.toolbar__new-todo:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 :deep(.toolbar__menubar) {
+  flex: 1 1 auto;
+  min-width: 0;
   border: 0;
   background: transparent;
   padding: 0 2px;
@@ -367,11 +406,12 @@ const menuItems = computed<MenuItem[]>(() => [
 }
 
 .toolbar__time-travel {
+  flex: 0 0 auto;
   display: inline-flex;
-  width: fit-content;
+  margin-left: auto;
+  white-space: nowrap;
   border: 1px solid rgb(var(--primary-rgb) / 0.35);
   border-radius: 999px;
-  margin: 0.35rem 0 0 0.45rem;
   padding: 0.22rem 0.55rem;
   color: var(--text);
   font-size: 0.78rem;
