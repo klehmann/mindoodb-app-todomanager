@@ -1,10 +1,10 @@
-import { Document } from "flexsearch";
 import {
   computed,
   onBeforeUnmount,
   onMounted,
   reactive,
   ref,
+  watch,
   type ComputedRef,
   type Ref,
 } from "vue";
@@ -75,30 +75,22 @@ function formatAttachmentSize(size: number) {
   return `${value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unitIndex]}`;
 }
 
-type TodoSearchDocument = {
-  selectionKey: string;
-  subject: string;
-  assignedTo: string;
-  description: string;
-};
+/** Document fields searched (and indexed) by the built-in full-text search. */
+const TODO_SEARCH_FIELDS = ["subject", "assignedTo", "description"];
 
-function createTodoSearchIndex() {
-  return new Document<TodoSearchDocument>({
-    id: "selectionKey",
-    index: ["subject", "assignedTo", "description"],
-  });
+function isFulltextNotEnabledError(error: unknown) {
+  return (
+    (error as { code?: string } | null)?.code === "fulltext-not-enabled" ||
+    (error instanceof Error && error.message.includes("fulltext-not-enabled"))
+  );
 }
 
-function addTodoToSearchIndex(
-  index: Document<TodoSearchDocument>,
-  todo: TodoItem,
-) {
-  index.add({
-    selectionKey: todo.selectionKey,
-    subject: todo.subject,
-    assignedTo: todo.assignedTo,
-    description: todo.description,
-  });
+/** Case-insensitive substring fallback when a database has no full-text index. */
+function todoMatchesQueryLocally(todo: TodoItem, query: string) {
+  const normalized = query.toLocaleLowerCase();
+  return [todo.subject, todo.assignedTo, todo.description].some((value) =>
+    value.toLocaleLowerCase().includes(normalized),
+  );
 }
 
 const DRAG_START_DISTANCE = 10;
@@ -117,7 +109,16 @@ export interface UseTodosOptions {
 
 export function useTodos(options: UseTodosOptions) {
   const todos = ref<TodoItem[]>([]);
-  const todoSearchIndex = ref<Document<TodoSearchDocument> | null>(null);
+  /**
+   * Selection keys matched by the active full-text search, or `null` while
+   * no search is active. Kept current by the `searchQuery` watcher below,
+   * which fans out `documents.query({ text })` per selected database.
+   */
+  const searchResultKeys = ref<Set<string> | null>(null);
+  let searchRunToken = 0;
+  let searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  /** Databases whose full-text index this session already ensured. */
+  const fulltextEnsured = new Set<string>();
   const todoPointerDragState = reactive({
     todoId: "",
     active: false,
@@ -243,21 +244,11 @@ export function useTodos(options: UseTodosOptions) {
       if (filterMode.value === "completed" && !todo.completed) {
         return false;
       }
-      if (!query) {
-        return true;
-      }
       return true;
     });
 
-    if (query) {
-      const searchResults =
-        todoSearchIndex.value?.search(query, {
-          merge: true,
-          limit: Math.max(todos.value.length, 1),
-        }) ?? [];
-      const matchingTodoIds = new Set(
-        searchResults.map((result) => String(result.id)),
-      );
+    if (query && searchResultKeys.value) {
+      const matchingTodoIds = searchResultKeys.value;
       filtered = filtered.filter((todo) =>
         matchingTodoIds.has(todo.selectionKey),
       );
@@ -572,10 +563,7 @@ export function useTodos(options: UseTodosOptions) {
     };
   }
 
-  async function listDatabaseTodos(
-    databaseId: string,
-    searchIndex: Document<TodoSearchDocument>,
-  ) {
+  async function listDatabaseTodos(databaseId: string) {
     const databaseInfo = databaseInfoById.value[databaseId];
     if (!databaseInfo?.capabilities.includes("read")) {
       return [];
@@ -596,13 +584,7 @@ export function useTodos(options: UseTodosOptions) {
         status: "existing",
       });
 
-      items.push(
-        ...page.items.map((item) => {
-          const todo = readTodoItem(item, databaseId);
-          addTodoToSearchIndex(searchIndex, todo);
-          return todo;
-        }),
-      );
+      items.push(...page.items.map((item) => readTodoItem(item, databaseId)));
       if (!page.nextCursor || page.nextCursor === cursor) {
         break;
       }
@@ -621,24 +603,133 @@ export function useTodos(options: UseTodosOptions) {
 
     if (!readableDatabaseIds.length) {
       todos.value = [];
-      todoSearchIndex.value = null;
+      searchResultKeys.value = null;
       clearSelection();
       return;
     }
 
-    const searchIndex = createTodoSearchIndex();
     const groups = await Promise.all(
       readableDatabaseIds.map(
-        async (databaseId) => await listDatabaseTodos(databaseId, searchIndex),
+        async (databaseId) => await listDatabaseTodos(databaseId),
       ),
     );
     todos.value = groups.flat();
-    todoSearchIndex.value = searchIndex;
+    if (searchQuery.value.trim()) {
+      await runTodoSearch();
+    }
     setSelectedTodoIds(selectedTodoIds.value);
     if (dialogTodoId.value) {
       applyDialogAttachmentsFromTodoList(dialogTodoId.value);
     }
   }
+
+  /**
+   * Turn on the database's built-in full-text index for the todo search
+   * fields (once per database and session; the write itself is idempotent).
+   * Databases without the `update` capability are skipped — searches there
+   * fall back to a local substring match.
+   */
+  async function ensureFulltextEnabled(
+    databaseId: string,
+    database: MindooDBAppDatabase,
+  ) {
+    if (fulltextEnsured.has(databaseId) || isTimeTravelActive.value) {
+      return;
+    }
+    fulltextEnsured.add(databaseId);
+    if (
+      !databaseInfoById.value[databaseId]?.capabilities.includes("update")
+    ) {
+      return;
+    }
+    try {
+      const setup = await database.getFulltextSetup();
+      if (setup?.enabled !== true) {
+        await database.setFulltextSetup({
+          enabled: true,
+          include: TODO_SEARCH_FIELDS,
+        });
+      }
+    } catch (error) {
+      console.warn("Enabling the full-text index failed", {
+        databaseId,
+        error,
+      });
+    }
+  }
+
+  /**
+   * Fan the active search out to every selected database through the
+   * host's full-text index (`documents.query` with a `text` clause) and
+   * collect the matching selection keys. Databases without an enabled
+   * index fall back to a local substring match over the loaded todos.
+   */
+  async function runTodoSearch() {
+    const query = searchQuery.value.trim();
+    const token = ++searchRunToken;
+    if (!query) {
+      searchResultKeys.value = null;
+      return;
+    }
+
+    const readableDatabaseIds = options.selectedDatabaseIds.value.filter(
+      (databaseId) =>
+        databaseInfoById.value[databaseId]?.capabilities.includes("read") ??
+        false,
+    );
+
+    const keys = new Set<string>();
+    await Promise.all(
+      readableDatabaseIds.map(async (databaseId) => {
+        const database = await options.getDatabase(databaseId);
+        if (!database) {
+          return;
+        }
+        await ensureFulltextEnabled(databaseId, database);
+        try {
+          const result = await database.documents.query({
+            text: { query, fields: TODO_SEARCH_FIELDS },
+            limit: 1000,
+          });
+          for (const row of result.rows) {
+            keys.add(buildTodoSelectionKey(databaseId, row.docId));
+          }
+        } catch (error) {
+          if (!isFulltextNotEnabledError(error)) {
+            console.warn("Full-text search failed", { databaseId, error });
+          }
+          for (const todo of todos.value) {
+            if (
+              todo.databaseId === databaseId &&
+              todoMatchesQueryLocally(todo, query)
+            ) {
+              keys.add(todo.selectionKey);
+            }
+          }
+        }
+      }),
+    );
+
+    if (token === searchRunToken) {
+      searchResultKeys.value = keys;
+    }
+  }
+
+  watch(searchQuery, (query) => {
+    if (searchDebounceHandle !== null) {
+      clearTimeout(searchDebounceHandle);
+      searchDebounceHandle = null;
+    }
+    if (!query.trim()) {
+      searchRunToken += 1;
+      searchResultKeys.value = null;
+      return;
+    }
+    searchDebounceHandle = setTimeout(() => {
+      searchDebounceHandle = null;
+      void runTodoSearch();
+    }, 200);
+  });
 
   async function refreshTodos() {
     options.error.value = null;
@@ -1255,6 +1346,11 @@ export function useTodos(options: UseTodosOptions) {
     document.removeEventListener("pointermove", handleTodoPointerMove);
     document.removeEventListener("pointerup", handleTodoPointerUp);
     document.removeEventListener("pointercancel", handleTodoPointerCancel);
+    if (searchDebounceHandle !== null) {
+      clearTimeout(searchDebounceHandle);
+      searchDebounceHandle = null;
+    }
+    searchRunToken += 1;
   });
 
   return {

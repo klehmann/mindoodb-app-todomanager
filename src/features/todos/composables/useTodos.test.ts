@@ -12,7 +12,31 @@ function createDatabaseStub(items: Array<Record<string, unknown>>) {
       create: vi.fn(),
       update: vi.fn().mockResolvedValue({ ok: true }),
       delete: vi.fn().mockResolvedValue({ ok: true }),
+      // Simulates the host full-text query with a substring match over the
+      // indexed todo fields.
+      query: vi.fn(
+        async (options: { text?: { query?: string } }) => {
+          const query = String(options.text?.query ?? "").toLowerCase();
+          const rows = items
+            .filter((item) => {
+              const data = (item.data ?? {}) as Record<string, unknown>;
+              return ["subject", "assignedTo", "description"].some((field) =>
+                String(data[field] ?? "")
+                  .toLowerCase()
+                  .includes(query),
+              );
+            })
+            .map((item) => ({
+              docId: item.id,
+              fields: (item.data ?? {}) as Record<string, unknown>,
+              lastModified: 0,
+            }));
+          return { rows, total: rows.length };
+        },
+      ),
     },
+    getFulltextSetup: vi.fn().mockResolvedValue({ enabled: true }),
+    setFulltextSetup: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -80,7 +104,7 @@ describe("useTodos", () => {
     unmount();
   });
 
-  it("searches subject, assignedTo, and description through the Flexsearch index", async () => {
+  it("searches subject, assignedTo, and description through the host full-text query", async () => {
     const mainDatabase = createDatabaseStub([
       {
         id: "todo-1",
@@ -133,13 +157,19 @@ describe("useTodos", () => {
     result.filterMode.value = "all";
 
     result.searchQuery.value = "Alpha";
-    expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Alpha roadmap"]);
+    await vi.waitFor(() => {
+      expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Alpha roadmap"]);
+    });
 
     result.searchQuery.value = "Alice";
-    expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Alpha roadmap"]);
+    await vi.waitFor(() => {
+      expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Alpha roadmap"]);
+    });
 
     result.searchQuery.value = "archive";
-    expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Beta release"]);
+    await vi.waitFor(() => {
+      expect(result.filteredTodos.value.map((todo) => todo.subject)).toEqual(["Beta release"]);
+    });
     expect(result.todosByQuadrant.value[4]).toHaveLength(1);
 
     unmount();
