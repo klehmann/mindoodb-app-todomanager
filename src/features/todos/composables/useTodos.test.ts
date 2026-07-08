@@ -516,4 +516,35 @@ describe("useTodos", () => {
 
     unmount();
   });
+
+  it("does not open the create dialog while time travel mode is active", () => {
+    const timeTravelActive = ref(true);
+    const { result, unmount } = withSetup(() => useTodos({
+      selectedDatabaseIds: ref(["main"]),
+      databases: ref([
+        { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete"] },
+      ] as any),
+      preferredDatabaseId: computed(() => "main"),
+      getDatabase: vi.fn(async () => null as any),
+      loading: ref(false),
+      busyAction: ref<string | null>(null),
+      error: ref<string | null>(null),
+      setSuccess: vi.fn(),
+      isTimeTravelActive: computed(() => timeTravelActive.value),
+    }));
+
+    // Alternate entry points (quadrant double-click, mobile FAB) call this
+    // directly; it must stay gated even though the disabled button is bypassed.
+    result.startCreateTodo(2);
+    expect(result.canCreateAny.value).toBe(false);
+    expect(result.dialogVisible.value).toBe(false);
+
+    // Leaving time travel re-enables creation through the same entry point.
+    timeTravelActive.value = false;
+    result.startCreateTodo(2);
+    expect(result.dialogVisible.value).toBe(true);
+    expect(result.draft.value.quadrant).toBe(2);
+
+    unmount();
+  });
 });

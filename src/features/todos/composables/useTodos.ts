@@ -502,6 +502,13 @@ export function useTodos(options: UseTodosOptions) {
     quadrant: TodoQuadrant = activeMobileQuadrant.value,
     databaseId = defaultDraftDatabaseId(),
   ) {
+    // Gate creation exactly like the "New todo" toolbar button (`canCreateAny`):
+    // block it in time-travel (read-only) mode or when no database grants create
+    // access, so alternate entry points — quadrant double-click, mobile FAB —
+    // can't bypass the disabled button and open the dialog anyway.
+    if (!canCreateAny.value) {
+      return;
+    }
     dialogMode.value = "create";
     dialogTodoId.value = null;
     draftDatabaseId.value = databaseId;
