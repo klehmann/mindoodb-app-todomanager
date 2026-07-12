@@ -78,8 +78,9 @@ async function handleFooterRecycleDrop(event: DragEvent) {
     <Message
       v-if="appUpdate.updateAvailable.value"
       severity="info"
-      :closable="false"
+      :closable="true"
       class="app-shell__update-banner"
+      @close="appUpdate.dismissUpdate"
     >
       <span>A new version of To Do Manager is available.</span>
       <button
