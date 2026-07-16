@@ -115,7 +115,7 @@ function createRecoveryUi() {
       <p data-todomanager-boot-recovery-message>Checking for an updated offline shell so To Do Manager can reload cleanly.</p>
       <div class="todomanager-boot-recovery__actions">
         <button type="button" class="todomanager-boot-recovery__primary" data-todomanager-boot-recovery-retry hidden>
-          Reload To Do Manager
+          Clear cache & reload
         </button>
         <button type="button" class="todomanager-boot-recovery__secondary" data-todomanager-boot-recovery-dismiss hidden>
           Dismiss
@@ -140,15 +140,16 @@ function createRecoveryUi() {
         dismissButton.hidden = true;
         return;
       }
-      message.textContent = "To Do Manager hit a startup error. Reload to fetch the latest version once it is available.";
+      message.textContent =
+        "To Do Manager hit a startup error. Clear the offline cache for this app and reload to fetch a fresh copy.";
       retryButton.hidden = false;
       dismissButton.hidden = false;
     },
     onRetry(listener: () => void) {
-      retryButton?.addEventListener("click", listener);
+      retryButton?.addEventListener("click", listener, { once: true });
     },
     onDismiss(listener: () => void) {
-      dismissButton?.addEventListener("click", listener);
+      dismissButton?.addEventListener("click", listener, { once: true });
     },
     remove() {
       root.remove();
@@ -230,6 +231,33 @@ async function ensureRecoveryServiceWorker() {
   }
 }
 
+async function clearOfflineCaches() {
+  if (!("caches" in window)) {
+    return;
+  }
+  const cacheNames = await caches.keys();
+  await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+}
+
+async function unregisterAppServiceWorkers() {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((registration) => registration.unregister()));
+}
+
+async function clearOfflineShellAndReload() {
+  clearRecoveryAttempts();
+  try {
+    await clearOfflineCaches();
+    await unregisterAppServiceWorkers();
+  } catch (error) {
+    console.warn("Could not fully clear the MindooDB To Do Manager offline shell during startup recovery.", error);
+  }
+  window.location.reload();
+}
+
 export async function installBootRecovery(): Promise<BootRecoveryController> {
   if (import.meta.env.DEV || typeof window === "undefined") {
     return {
@@ -243,6 +271,7 @@ export async function installBootRecovery(): Promise<BootRecoveryController> {
   let bootCompleted = false;
   let recovering = false;
   let recoveryUi: ReturnType<typeof createRecoveryUi> | null = null;
+  let hardResetWired = false;
 
   const finishBoot = () => {
     if (bootCompleted) {
@@ -257,7 +286,7 @@ export async function installBootRecovery(): Promise<BootRecoveryController> {
     window.removeEventListener(TODOMANAGER_BOOT_COMPLETED_EVENT, handleBootCompleted);
   };
 
-  const attemptRecovery = async (reason: string, error?: unknown, forceReload = false) => {
+  const attemptRecovery = async (reason: string, error?: unknown) => {
     if (bootCompleted || recovering) {
       return;
     }
@@ -269,10 +298,8 @@ export async function installBootRecovery(): Promise<BootRecoveryController> {
     console.error("MindooDB To Do Manager startup recovery triggered.", { reason, error });
 
     const currentAttempts = readRecoveryAttempts();
-    const shouldAutoReload = forceReload || currentAttempts < 1;
-    if (!forceReload) {
-      writeRecoveryAttempts(currentAttempts + 1);
-    }
+    const shouldAutoReload = currentAttempts < 1;
+    writeRecoveryAttempts(currentAttempts + 1);
 
     const registration = await registrationPromise;
     const activatedNewWorker = await updateAndActivateNewestWorker(registration);
@@ -282,15 +309,16 @@ export async function installBootRecovery(): Promise<BootRecoveryController> {
     }
 
     recoveryUi.setStatus("failed");
-    recoveryUi.onRetry(() => {
-      void attemptRecovery("manual-retry", undefined, true).then(() => {
-        window.location.reload();
+    if (!hardResetWired) {
+      hardResetWired = true;
+      recoveryUi.onRetry(() => {
+        void clearOfflineShellAndReload();
       });
-    });
-    recoveryUi.onDismiss(() => {
-      recoveryUi?.remove();
-      recoveryUi = null;
-    });
+      recoveryUi.onDismiss(() => {
+        recoveryUi?.remove();
+        recoveryUi = null;
+      });
+    }
 
     recovering = false;
     if (shouldAutoReload) {
