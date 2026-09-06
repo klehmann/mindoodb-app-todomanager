@@ -33,6 +33,7 @@ export function useTodoManagerApp() {
   const hostViewport = ref<MindooDBAppViewport | null>(null);
   const hostUiPreferences = ref<MindooDBAppUiPreferences>({
     iosMultitaskingOptimized: false,
+    reduceMotion: false,
   });
   const refreshMode = ref<TodoSyncMode>("off");
   const localViewportWidth = ref(typeof window !== "undefined" ? window.innerWidth : 1440);
