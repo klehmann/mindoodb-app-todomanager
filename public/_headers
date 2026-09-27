@@ -1,0 +1,18 @@
+# Hosted-bundle installation from MindooDB Haven.
+#
+# Haven fetches these two files cross-origin to install and update this app as a
+# hosted bundle. Without CORS the fetch fails and the App Store install breaks.
+#
+# `*` rather than an origin allowlist: static `_headers` can only emit one fixed
+# value, and browsers reject multi-valued `Access-Control-Allow-Origin`. The
+# bundle is public build output served without credentials.
+
+/haven-bundle.json
+  Access-Control-Allow-Origin: *
+  # The manifest is the freshness signal for the update check; it must not be cached.
+  Cache-Control: no-cache
+
+/haven-bundle.zip
+  Access-Control-Allow-Origin: *
+  # Pinned by hash in the manifest, so a stale copy can never pass as current.
+  Cache-Control: public, max-age=300
