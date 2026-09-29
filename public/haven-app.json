@@ -1,0 +1,89 @@
+{
+  "format": "mindoodb.haven.app",
+  "formatVersion": 1,
+  "appId": "mindoodb-app-todomanager",
+  "label": "Mindoo TodoManager",
+  "description": "Visual task workflow using Covey's four-quadrant method with drag and drop.",
+  "version": "1.0.0",
+  "runtime": "iframe",
+  "hosting": "external",
+  "defaultLaunchDatabaseId": "todomanager",
+  "databases": [
+    {
+      "logicalDatabaseId": "todomanager",
+      "label": "TodoManager database",
+      "databaseId": "todomanager",
+      "permissions": [
+        "write",
+        "delete",
+        "history",
+        "attachments",
+        "views"
+      ]
+    }
+  ],
+  "listing": {
+    "summary": {
+      "en": "Visual task workflow using Covey's four-quadrant method with drag and drop.",
+      "de": "Visueller Aufgaben-Workflow nach Coveys Vier-Quadranten-Methode mit Drag-and-Drop.",
+      "es": "Flujo de tareas visual según el método de los cuatro cuadrantes de Covey, con arrastrar y soltar.",
+      "fr": "Flux de tâches visuel selon la méthode des quatre quadrants de Covey, avec glisser-déposer.",
+      "it": "Flusso di lavoro visivo per le attività secondo il metodo dei quattro quadranti di Covey, con trascinamento.",
+      "nb": "Visuell oppgaveflyt etter Coveys fire-kvadrant-metode med dra og slipp.",
+      "nl": "Visuele takenworkflow volgens Covey's vier-kwadrantenmethode met slepen en neerzetten.",
+      "pl": "Wizualny przepływ zadań według metody czterech ćwiartek Coveya, z funkcją przeciągnij i upuść."
+    },
+    "description": {
+      "de": "Mindoo TodoManager macht aus Coveys Vier-Quadranten-Methode (https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) einen visuellen Aufgaben-Workflow, um sich auf das Wesentliche zu konzentrieren.\n\n• To-dos nach Wichtigkeit und Dringlichkeit in einer übersichtlichen 2x2-Matrix organisieren\n\n• Quadranten in Prioritätsreihenfolge abarbeiten und die unangenehmste Aufgabe zuerst angehen\n\n• Aufgaben schnell per Drag-and-Drop verschieben – in Desktop-, Tablet- und Smartphone-Layouts",
+      "en": "Mindoo TodoManager turns Covey's four-quadrant method (https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) into a visual task workflow for staying focused on what matters most.\n\n• Organise todos by importance and urgency in a clear 2x2 matrix\n\n• Work through quadrants in priority order and tackle the ugliest task first\n\n• Move tasks quickly with drag and drop across desktop, tablet, and phone layouts",
+      "es": "Mindoo TodoManager convierte el método de los cuatro cuadrantes (https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) de Covey en un flujo de trabajo visual de tareas para mantener el foco en lo más importante.\n\n• Organiza las tareas por importancia y urgencia en una clara matriz 2x2\n\n• Trabaja los cuadrantes en orden de prioridad y aborda primero la tarea más desagradable\n\n• Mueve tareas rápidamente con arrastrar y soltar en diseños para escritorio, tableta y móvil",
+      "fr": "Mindoo TodoManager transforme la méthode des quatre quadrants (https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) de Covey en un flux de tâches visuel pour rester concentré sur l'essentiel.\n\n• Organisez vos tâches par importance et urgence dans une matrice 2x2 claire\n\n• Traitez les quadrants par ordre de priorité et attaquez d'abord la tâche la plus rebutante\n\n• Déplacez rapidement les tâches par glisser-déposer sur ordinateur, tablette et téléphone",
+      "it": "Mindoo TodoManager trasforma il metodo dei quattro quadranti (https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) di Covey in un flusso di lavoro visivo per le attività, per restare concentrati su ciò che conta di più.\n\n• Organizza le attività per importanza e urgenza in una chiara matrice 2x2\n\n• Lavora sui quadranti in ordine di priorità e affronta per prima l'attività più sgradevole\n\n• Sposta rapidamente le attività con il trascinamento su layout per desktop, tablet e telefono",
+      "nb": "Mindoo TodoManager gjør Coveys fire-kvadrant-metode (https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) om til en visuell oppgaveflyt for å holde fokus på det som betyr mest.\n\n• Organiser gjøremål etter viktighet og hastegrad i en oversiktlig 2x2-matrise\n\n• Jobb gjennom kvadrantene i prioritert rekkefølge og ta den verste oppgaven først\n\n• Flytt oppgaver raskt med dra og slipp på skrivebord, nettbrett og mobil",
+      "nl": "Mindoo TodoManager maakt van Covey's vier-kwadrantenmethode (https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) een visuele takenworkflow om gefocust te blijven op wat het belangrijkst is.\n\n• Orden taken op belangrijkheid en urgentie in een overzichtelijke 2x2-matrix\n\n• Werk de kwadranten in volgorde van prioriteit af en pak de vervelendste taak als eerste aan\n\n• Verplaats taken snel met slepen en neerzetten in desktop-, tablet- en telefoonweergaven",
+      "pl": "Mindoo TodoManager zamienia metodę czterech ćwiartek (https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) Coveya w wizualny przepływ pracy z zadaniami, który pomaga skupić się na tym, co najważniejsze.\n\n• Porządkuj zadania według ważności i pilności w przejrzystej macierzy 2x2\n\n• Przechodź przez ćwiartki w kolejności priorytetów i zaczynaj od najbardziej nieprzyjemnego zadania\n\n• Szybko przenoś zadania metodą przeciągnij i upuść w układach na komputer, tablet i telefon"
+    },
+    "descriptionMarkdown": {
+      "de": "**Mindoo TodoManager** macht aus Coveys [Vier-Quadranten-Methode](https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) einen visuellen Aufgaben-Workflow, um sich auf das Wesentliche zu konzentrieren.\n\n- To-dos nach Wichtigkeit und Dringlichkeit in einer übersichtlichen 2x2-Matrix organisieren\n- Quadranten in Prioritätsreihenfolge abarbeiten und die unangenehmste Aufgabe zuerst angehen\n- Aufgaben schnell per Drag-and-Drop verschieben – in Desktop-, Tablet- und Smartphone-Layouts",
+      "en": "**Mindoo TodoManager** turns Covey's [four-quadrant method](https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) into a visual task workflow for staying focused on what matters most.\n\n- Organise todos by importance and urgency in a clear 2x2 matrix\n- Work through quadrants in priority order and tackle the ugliest task first\n- Move tasks quickly with drag and drop across desktop, tablet, and phone layouts",
+      "es": "**Mindoo TodoManager** convierte el [método de los cuatro cuadrantes](https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) de Covey en un flujo de trabajo visual de tareas para mantener el foco en lo más importante.\n\n- Organiza las tareas por importancia y urgencia en una clara matriz 2x2\n- Trabaja los cuadrantes en orden de prioridad y aborda primero la tarea más desagradable\n- Mueve tareas rápidamente con arrastrar y soltar en diseños para escritorio, tableta y móvil",
+      "fr": "**Mindoo TodoManager** transforme la [méthode des quatre quadrants](https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) de Covey en un flux de tâches visuel pour rester concentré sur l'essentiel.\n\n- Organisez vos tâches par importance et urgence dans une matrice 2x2 claire\n- Traitez les quadrants par ordre de priorité et attaquez d'abord la tâche la plus rebutante\n- Déplacez rapidement les tâches par glisser-déposer sur ordinateur, tablette et téléphone",
+      "it": "**Mindoo TodoManager** trasforma il [metodo dei quattro quadranti](https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) di Covey in un flusso di lavoro visivo per le attività, per restare concentrati su ciò che conta di più.\n\n- Organizza le attività per importanza e urgenza in una chiara matrice 2x2\n- Lavora sui quadranti in ordine di priorità e affronta per prima l'attività più sgradevole\n- Sposta rapidamente le attività con il trascinamento su layout per desktop, tablet e telefono",
+      "nb": "**Mindoo TodoManager** gjør Coveys [fire-kvadrant-metode](https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) om til en visuell oppgaveflyt for å holde fokus på det som betyr mest.\n\n- Organiser gjøremål etter viktighet og hastegrad i en oversiktlig 2x2-matrise\n- Jobb gjennom kvadrantene i prioritert rekkefølge og ta den verste oppgaven først\n- Flytt oppgaver raskt med dra og slipp på skrivebord, nettbrett og mobil",
+      "nl": "**Mindoo TodoManager** maakt van Covey's [vier-kwadrantenmethode](https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) een visuele takenworkflow om gefocust te blijven op wat het belangrijkst is.\n\n- Orden taken op belangrijkheid en urgentie in een overzichtelijke 2x2-matrix\n- Werk de kwadranten in volgorde van prioriteit af en pak de vervelendste taak als eerste aan\n- Verplaats taken snel met slepen en neerzetten in desktop-, tablet- en telefoonweergaven",
+      "pl": "**Mindoo TodoManager** zamienia [metodę czterech ćwiartek](https://appfluence.com/productivity/time-management-strategies-for-busy-people-using-the-4-quadrant-method/) Coveya w wizualny przepływ pracy z zadaniami, który pomaga skupić się na tym, co najważniejsze.\n\n- Porządkuj zadania według ważności i pilności w przejrzystej macierzy 2x2\n- Przechodź przez ćwiartki w kolejności priorytetów i zaczynaj od najbardziej nieprzyjemnego zadania\n- Szybko przenoś zadania metodą przeciągnij i upuść w układach na komputer, tablet i telefon"
+    },
+    "icon": "listing/icon.webp",
+    "screenshots": [
+      {
+        "file": "listing/01-light.webp",
+        "caption": {
+          "en": "TodoManager turns the Covey-style quadrant view into a clean team task board inside Haven.",
+          "de": "TodoManager verwandelt die Covey-Quadranten-Ansicht in ein aufgeräumtes Team-Aufgabenboard direkt in Haven.",
+          "es": "TodoManager convierte la vista de cuadrantes al estilo Covey en un tablero de tareas de equipo claro dentro de Haven.",
+          "fr": "TodoManager transforme la vue en quadrants façon Covey en un tableau de tâches d'équipe épuré dans Haven.",
+          "it": "TodoManager trasforma la vista a quadranti in stile Covey in una lavagna di attività di squadra ordinata dentro Haven.",
+          "nb": "TodoManager gjør kvadrantvisningen i Covey-stil om til en ryddig oppgavetavle for team i Haven.",
+          "nl": "TodoManager maakt van de kwadrantweergave in Covey-stijl een overzichtelijk teamtakenbord binnen Haven.",
+          "pl": "TodoManager zamienia widok ćwiartek w stylu Coveya w przejrzystą zespołową tablicę zadań w Haven."
+        }
+      },
+      {
+        "file": "listing/02-dark.webp",
+        "caption": {
+          "en": "The same TodoManager workspace also ships with a polished dark theme that matches Haven.",
+          "de": "Derselbe TodoManager-Arbeitsbereich bringt auch ein poliertes dunkles Theme mit, das zu Haven passt.",
+          "es": "El mismo espacio de trabajo de TodoManager incluye además un cuidado tema oscuro a juego con Haven.",
+          "fr": "Le même espace de travail TodoManager est aussi livré avec un thème sombre soigné assorti à Haven.",
+          "it": "Lo stesso spazio di lavoro di TodoManager include anche un curato tema scuro in linea con Haven.",
+          "nb": "Det samme TodoManager-arbeidsområdet leveres også med et gjennomført mørkt tema som matcher Haven.",
+          "nl": "Dezelfde TodoManager-werkruimte wordt ook geleverd met een verzorgd donker thema dat bij Haven past.",
+          "pl": "Ten sam obszar roboczy TodoManager ma też dopracowany ciemny motyw pasujący do Haven."
+        }
+      }
+    ],
+    "publisher": {
+      "name": "Mindoo GmbH"
+    }
+  }
+}

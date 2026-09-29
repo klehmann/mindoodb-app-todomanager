@@ -7,6 +7,12 @@
 # value, and browsers reject multi-valued `Access-Control-Allow-Origin`. The
 # bundle is public build output served without credentials.
 
+# haven-app.json is what Haven fetches to install this app from its URL (and what the
+# landing page reads). Without CORS the install fails from haven.mindoodb.com.
+/haven-app.json
+  Access-Control-Allow-Origin: *
+  Cache-Control: no-cache
+
 /haven-bundle.json
   Access-Control-Allow-Origin: *
   # The manifest is the freshness signal for the update check; it must not be cached.
