@@ -11,20 +11,23 @@ import {
 import {
   canPreviewAttachment,
   type MindooDBAppAttachmentInfo,
+  type MindooDBAppCapability,
   type MindooDBAppDatabase,
   type MindooDBAppDatabaseInfo,
 } from "mindoodb-app-sdk";
 
+import { createTodoUndo, type TodoChange } from "@/features/undo/todoUndo";
+
 import {
   buildTodoSelectionKey,
-  buildTodoCreateInput,
-  buildTodoPatch,
   EMPTY_TODO_DRAFT,
   readTodoItem,
+  snapshotTodo,
   type TodoDraft,
   type TodoFilterMode,
   type TodoItem,
   type TodoQuadrant,
+  type TodoSnapshot,
   type TodoSortMode,
 } from "./todoTypes";
 
@@ -999,6 +1002,174 @@ export function useTodos(options: UseTodosOptions) {
     return canPreviewAttachment(fileName, mimeType);
   }
 
+  function requireCapability(databaseId: string, capability: MindooDBAppCapability, message: string) {
+    if (!(databaseInfoById.value[databaseId]?.capabilities.includes(capability) ?? false)) {
+      throw new Error(message);
+    }
+  }
+
+  async function requireDatabase(databaseId: string) {
+    const database = await options.getDatabase(databaseId);
+    if (!database) {
+      throw new Error("Failed to open the todo database.");
+    }
+    return database;
+  }
+
+  function resolveTodos(todoKeys: string[]) {
+    return todoKeys
+      .map((todoKey) => todos.value.find((todo) => todo.selectionKey === todoKey) ?? null)
+      .filter((todo): todo is TodoItem => Boolean(todo));
+  }
+
+  /**
+   * Creates todos as one undo step and reloads the board. The writing core
+   * behind the dialog and the agent tools; callers handle busy state and
+   * messages.
+   */
+  async function createTodos(
+    inputs: Array<{ databaseId: string; fields: Partial<TodoSnapshot> }>,
+    label: string,
+    byAgent = false,
+  ) {
+    assertWritable();
+    const changes: TodoChange[] = [];
+    for (const input of inputs) {
+      requireCapability(input.databaseId, "create", "The selected database does not allow creating todos.");
+    }
+    for (const input of inputs) {
+      const database = await requireDatabase(input.databaseId);
+      const fields: TodoSnapshot = {
+        ...EMPTY_TODO_DRAFT,
+        assignedToId: null,
+        originApp: null,
+        originId: null,
+        originLabel: null,
+        ...input.fields,
+      };
+      const stored = Object.fromEntries(
+        Object.entries(fields).filter(
+          ([key, value]) => !((key.startsWith("origin") || key === "assignedToId") && value === null),
+        ),
+      );
+      const now = new Date().toISOString();
+      const created = await database.documents.create({ set: { ...stored, createdAt: now, updatedAt: now } });
+      changes.push({
+        databaseId: input.databaseId,
+        todoId: created.id,
+        subject: String(fields.subject),
+        before: null,
+        after: fields,
+      });
+    }
+    const step = todoUndo.record(label, changes, byAgent);
+    await listAllTodos();
+    return {
+      created: changes.map((change) => ({ databaseId: change.databaseId, id: change.todoId })),
+      step,
+    };
+  }
+
+  /** Changes fields of todos as one undo step and reloads the board. */
+  async function editTodos(
+    edits: Array<{ todo: TodoItem; set: Partial<TodoSnapshot> }>,
+    label: string,
+    byAgent = false,
+  ) {
+    assertWritable();
+    for (const edit of edits) {
+      requireCapability(edit.todo.databaseId, "update", "One or more databases do not allow updating todos.");
+    }
+    const changes: TodoChange[] = [];
+    for (const edit of edits) {
+      const database = await requireDatabase(edit.todo.databaseId);
+      const set: Record<string, unknown> = { ...edit.set, updatedAt: new Date().toISOString() };
+      if (!edit.todo.createdAt) {
+        set.createdAt = set.updatedAt;
+      }
+      await database.documents.update(edit.todo.id, { set });
+      const before = snapshotTodo(edit.todo);
+      const after = { ...before, ...edit.set };
+      changes.push({
+        databaseId: edit.todo.databaseId,
+        todoId: edit.todo.id,
+        subject: String(after.subject),
+        before,
+        after,
+      });
+    }
+    const step = todoUndo.record(label, changes, byAgent);
+    await listAllTodos();
+    return { step };
+  }
+
+  /** Deletes todos as one undo step (undo brings them back) and reloads the board. */
+  async function removeTodos(list: TodoItem[], label: string, byAgent = false) {
+    assertWritable();
+    for (const todo of list) {
+      requireCapability(todo.databaseId, "delete", "One or more databases do not allow deleting todos.");
+    }
+    const changes: TodoChange[] = [];
+    for (const todo of list) {
+      const database = await requireDatabase(todo.databaseId);
+      await database.documents.delete(todo.id);
+      changes.push({
+        databaseId: todo.databaseId,
+        todoId: todo.id,
+        subject: todo.subject,
+        before: snapshotTodo(todo),
+        after: null,
+      });
+    }
+    const step = todoUndo.record(label, changes, byAgent);
+    await listAllTodos();
+    return { step };
+  }
+
+  const todoUndo = createTodoUndo({
+    getDatabase: options.getDatabase,
+    afterApply: async () => {
+      await listAllTodos();
+    },
+  });
+
+  /** Undo/redo from the UI (toolbar, Ctrl+Z), with a message for the user. */
+  async function undoLastChange() {
+    if (isTimeTravelActive.value || !todoUndo.canUndo.value) {
+      return;
+    }
+    options.busyAction.value = "Undoing";
+    options.error.value = null;
+    try {
+      const [step] = await todoUndo.undo();
+      if (step) {
+        options.setSuccess(`Undid "${step.label}".`);
+      }
+    } catch (error) {
+      options.error.value = readErrorMessage(error, "Failed to undo.");
+    } finally {
+      options.busyAction.value = null;
+    }
+  }
+
+  async function redoLastChange() {
+    if (isTimeTravelActive.value || !todoUndo.canRedo.value) {
+      return;
+    }
+    options.busyAction.value = "Redoing";
+    options.error.value = null;
+    try {
+      const [step] = await todoUndo.redo();
+      if (step) {
+        options.setSuccess(`Redid "${step.label}".`);
+      }
+    } catch (error) {
+      options.error.value = readErrorMessage(error, "Failed to redo.");
+    } finally {
+      options.busyAction.value = null;
+    }
+  }
+
   async function saveDialogTodo() {
     assertWritable();
     const nextSubject = draft.value.subject.trim();
@@ -1019,33 +1190,13 @@ export function useTodos(options: UseTodosOptions) {
           throw new Error("No target database is available for new todos.");
         }
 
-        if (
-          !(
-            databaseInfoById.value[targetDatabaseId]?.capabilities.includes(
-              "create",
-            ) ?? false
-          )
-        ) {
-          throw new Error(
-            "The selected database does not allow creating todos.",
-          );
-        }
-
-        const targetDatabase = await options.getDatabase(targetDatabaseId);
-        if (!targetDatabase) {
-          throw new Error("Failed to open the selected database.");
-        }
-
-        const created = await targetDatabase.documents.create(
-          buildTodoCreateInput({
-            ...draft.value,
-            subject: nextSubject,
-          }),
+        const { created } = await createTodos(
+          [{ databaseId: targetDatabaseId, fields: { ...draft.value, subject: nextSubject } }],
+          `Create "${nextSubject}"`,
         );
-        await listAllTodos();
-        setSelectedTodoIds([
-          buildTodoSelectionKey(targetDatabaseId, created.id),
-        ]);
+        setSelectedTodoIds(
+          created.map((entry) => buildTodoSelectionKey(entry.databaseId, entry.id)),
+        );
         options.setSuccess(`Created todo "${nextSubject}".`);
       } else {
         const current =
@@ -1055,31 +1206,22 @@ export function useTodos(options: UseTodosOptions) {
         if (!current) {
           throw new Error("The todo could not be found.");
         }
-        if (
-          !(
-            databaseInfoById.value[current.databaseId]?.capabilities.includes(
-              "update",
-            ) ?? false
-          )
-        ) {
-          throw new Error(
-            "The selected database does not allow updating todos.",
-          );
-        }
 
-        const targetDatabase = await options.getDatabase(current.databaseId);
-        if (!targetDatabase) {
-          throw new Error("Failed to open the todo database.");
-        }
-
-        await targetDatabase.documents.update(
-          current.id,
-          buildTodoPatch(current, {
-            ...draft.value,
-            subject: nextSubject,
-          }),
+        // A typed assignee no longer names the directory person picked before.
+        const assigneeChanged = draft.value.assignedTo.trim() !== current.assignedTo.trim();
+        await editTodos(
+          [
+            {
+              todo: current,
+              set: {
+                ...draft.value,
+                subject: nextSubject,
+                ...(assigneeChanged && current.assignedToId ? { assignedToId: null } : {}),
+              },
+            },
+          ],
+          `Edit "${nextSubject}"`,
         );
-        await listAllTodos();
         setSelectedTodoIds([current.selectionKey]);
         options.setSuccess(`Saved todo "${nextSubject}".`);
       }
@@ -1103,52 +1245,15 @@ export function useTodos(options: UseTodosOptions) {
       todoIds.length > 1 ? "Deleting todos" : "Deleting todo";
     options.error.value = null;
     try {
-      const todosToDelete = todoIds
-        .map(
-          (todoId) =>
-            todos.value.find((todo) => todo.selectionKey === todoId) ?? null,
-        )
-        .filter((todo): todo is TodoItem => Boolean(todo));
-
+      const todosToDelete = resolveTodos(todoIds);
       if (!todosToDelete.length) {
         return;
       }
 
-      const groupedTodos = new Map<string, TodoItem[]>();
-      for (const todo of todosToDelete) {
-        if (
-          !(
-            databaseInfoById.value[todo.databaseId]?.capabilities.includes(
-              "delete",
-            ) ?? false
-          )
-        ) {
-          throw new Error(
-            "One or more selected databases do not allow deleting todos.",
-          );
-        }
-        groupedTodos.set(todo.databaseId, [
-          ...(groupedTodos.get(todo.databaseId) ?? []),
-          todo,
-        ]);
-      }
-
-      await Promise.all(
-        Array.from(groupedTodos.entries()).map(
-          async ([databaseId, databaseTodos]) => {
-            const database = await options.getDatabase(databaseId);
-            if (!database) {
-              throw new Error("Failed to open one of the selected databases.");
-            }
-            await Promise.all(
-              databaseTodos.map(
-                async (todo) => await database.documents.delete(todo.id),
-              ),
-            );
-          },
-        ),
+      await removeTodos(
+        todosToDelete,
+        todosToDelete.length > 1 ? `Delete ${todosToDelete.length} todos` : `Delete "${todosToDelete[0].subject}"`,
       );
-      await listAllTodos();
       clearSelection();
       options.setSuccess(
         todoIds.length > 1
@@ -1180,57 +1285,17 @@ export function useTodos(options: UseTodosOptions) {
       todoIds.length > 1 ? "Moving todos" : "Moving todo";
     options.error.value = null;
     try {
-      const todosToMove = todoIds
-        .map(
-          (todoId) =>
-            todos.value.find((todo) => todo.selectionKey === todoId) ?? null,
-        )
-        .filter((todo): todo is TodoItem => Boolean(todo));
-
+      const todosToMove = resolveTodos(todoIds);
       if (!todosToMove.length) {
         return;
       }
 
-      const groupedTodos = new Map<string, TodoItem[]>();
-      for (const todo of todosToMove) {
-        if (
-          !(
-            databaseInfoById.value[todo.databaseId]?.capabilities.includes(
-              "update",
-            ) ?? false
-          )
-        ) {
-          throw new Error(
-            "One or more selected databases do not allow updating todos.",
-          );
-        }
-        groupedTodos.set(todo.databaseId, [
-          ...(groupedTodos.get(todo.databaseId) ?? []),
-          todo,
-        ]);
-      }
-
-      await Promise.all(
-        Array.from(groupedTodos.entries()).map(
-          async ([databaseId, databaseTodos]) => {
-            const database = await options.getDatabase(databaseId);
-            if (!database) {
-              throw new Error("Failed to open one of the selected databases.");
-            }
-            await Promise.all(
-              databaseTodos.map(async (todo) => {
-                await database.documents.update(todo.id, {
-                  set: {
-                    quadrant,
-                    updatedAt: new Date().toISOString(),
-                  },
-                });
-              }),
-            );
-          },
-        ),
+      await editTodos(
+        todosToMove.map((todo) => ({ todo, set: { quadrant } })),
+        todosToMove.length > 1
+          ? `Move ${todosToMove.length} todos to quadrant ${quadrant}`
+          : `Move "${todosToMove[0].subject}" to quadrant ${quadrant}`,
       );
-      await listAllTodos();
       setSelectedTodoIds(todoIds);
       activeMobileQuadrant.value = quadrant;
       options.setSuccess(
@@ -1260,57 +1325,17 @@ export function useTodos(options: UseTodosOptions) {
     options.busyAction.value = completed ? "Completing todo" : "Reopening todo";
     options.error.value = null;
     try {
-      const todosToUpdate = todoIds
-        .map(
-          (todoId) =>
-            todos.value.find((todo) => todo.selectionKey === todoId) ?? null,
-        )
-        .filter((todo): todo is TodoItem => Boolean(todo));
-
+      const todosToUpdate = resolveTodos(todoIds);
       if (!todosToUpdate.length) {
         return;
       }
 
-      const groupedTodos = new Map<string, TodoItem[]>();
-      for (const todo of todosToUpdate) {
-        if (
-          !(
-            databaseInfoById.value[todo.databaseId]?.capabilities.includes(
-              "update",
-            ) ?? false
-          )
-        ) {
-          throw new Error(
-            "One or more selected databases do not allow updating todos.",
-          );
-        }
-        groupedTodos.set(todo.databaseId, [
-          ...(groupedTodos.get(todo.databaseId) ?? []),
-          todo,
-        ]);
-      }
-
-      await Promise.all(
-        Array.from(groupedTodos.entries()).map(
-          async ([databaseId, databaseTodos]) => {
-            const database = await options.getDatabase(databaseId);
-            if (!database) {
-              throw new Error("Failed to open one of the selected databases.");
-            }
-            await Promise.all(
-              databaseTodos.map(async (todo) => {
-                await database.documents.update(todo.id, {
-                  set: {
-                    completed,
-                    updatedAt: new Date().toISOString(),
-                  },
-                });
-              }),
-            );
-          },
-        ),
+      const what =
+        todosToUpdate.length > 1 ? `${todosToUpdate.length} todos` : `"${todosToUpdate[0].subject}"`;
+      await editTodos(
+        todosToUpdate.map((todo) => ({ todo, set: { completed } })),
+        completed ? `Complete ${what}` : `Reopen ${what}`,
       );
-      await listAllTodos();
       setSelectedTodoIds(todoIds);
       options.setSuccess(
         completed
@@ -1410,6 +1435,13 @@ export function useTodos(options: UseTodosOptions) {
     moveTodos,
     moveSelectedTodos,
     setTodosCompleted,
+    listDatabaseTodos,
+    createTodos,
+    editTodos,
+    removeTodos,
+    todoUndo,
+    undoLastChange,
+    redoLastChange,
     canUseTodoAttachments,
     canManageTodoAttachments,
     uploadTodoAttachments,

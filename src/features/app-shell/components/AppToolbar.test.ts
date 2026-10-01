@@ -34,6 +34,9 @@ const TransitionStub = defineComponent({
 function createAppStub() {
   return {
     hostUiPreferences: ref({ iosMultitaskingOptimized: true }),
+    todoUndo: { canUndo: ref(false), canRedo: ref(false) },
+    undoLastChange: vi.fn(),
+    redoLastChange: vi.fn(),
     syncState: ref<"idle" | "syncing" | "error">("idle"),
     syncError: ref<string | null>(null),
     refreshMode: ref<TodoSyncMode>("30s"),

@@ -8,6 +8,7 @@
   "runtime": "iframe",
   "hosting": "external",
   "defaultLaunchDatabaseId": "todomanager",
+  "agentToolPrefix": "todo",
   "databases": [
     {
       "logicalDatabaseId": "todomanager",
@@ -18,7 +19,8 @@
         "delete",
         "history",
         "attachments",
-        "views"
+        "views",
+        "directory"
       ]
     }
   ],

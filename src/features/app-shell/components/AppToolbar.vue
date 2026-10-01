@@ -206,6 +206,26 @@ const menuItems = computed<MenuItem[]>(() => [
         <i class="pi pi-plus" aria-hidden="true" />
         <span>New todo</span>
       </button>
+      <button
+        type="button"
+        class="toolbar__history-button"
+        title="Undo (Ctrl+Z)"
+        aria-label="Undo"
+        :disabled="!props.app.todoUndo.canUndo.value || props.app.isBusy.value || props.app.isTimeTravelActive.value"
+        @click="props.app.undoLastChange()"
+      >
+        <i class="pi pi-undo" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        class="toolbar__history-button"
+        title="Redo (Ctrl+Shift+Z)"
+        aria-label="Redo"
+        :disabled="!props.app.todoUndo.canRedo.value || props.app.isBusy.value || props.app.isTimeTravelActive.value"
+        @click="props.app.redoLastChange()"
+      >
+        <i class="pi pi-undo toolbar__redo-icon" aria-hidden="true" />
+      </button>
       <Menubar :model="menuItems" class="toolbar__menubar">
         <template #end>
           <div
@@ -288,6 +308,10 @@ const menuItems = computed<MenuItem[]>(() => [
         <li><strong>4:</strong> Not important and not due soon</li>
       </ul>
       <p>
+        Undo and redo (the arrows next to "New todo", or Ctrl+Z and Ctrl+Shift+Z) take back changes of this
+        session, including changes an AI agent made.
+      </p>
+      <p>
         Use the Sources menu for filter, sort, showing search, and which databases to read from. Drag todos
         between quadrants to re-prioritize them, or drag them to the recycle bin to delete them.
       </p>
@@ -359,6 +383,33 @@ const menuItems = computed<MenuItem[]>(() => [
 .toolbar__new-todo:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.toolbar__history-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border: 0;
+  border-radius: 0.8rem;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.toolbar__history-button:hover:not(:disabled) {
+  background: rgb(var(--primary-rgb) / 0.16);
+}
+
+.toolbar__redo-icon {
+  transform: scaleX(-1);
+}
+
+.toolbar__history-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 :deep(.toolbar__menubar) {

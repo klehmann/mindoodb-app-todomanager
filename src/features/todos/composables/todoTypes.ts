@@ -21,8 +21,26 @@ export type TodoDraft = {
   completed: boolean;
 };
 
+/**
+ * Where a todo came from when another app (or an agent on its behalf) created
+ * it, e.g. `{ app: "vega", id: "<mapId>/<nodeId>" }`. Not shown in the UI; it
+ * lets agents find the todo again instead of creating a duplicate.
+ */
+export type TodoOrigin = {
+  app: string;
+  id: string;
+  label?: string;
+};
+
 export type TodoItem = TodoDraft & {
   id: string;
+  /**
+   * Directory user id (canonical name) of the assignee when the todo was
+   * assigned to a person from the tenant directory; `assignedTo` then holds
+   * that person's readable name. `null` for free-text assignees.
+   */
+  assignedToId: string | null;
+  origin: TodoOrigin | null;
   databaseId: string;
   selectionKey: string;
   /** Derived from `attachments.length`; kept for quick checks. */
@@ -44,6 +62,63 @@ export const TODO_QUADRANTS: TodoQuadrantDefinition[] = [
   { quadrant: 3, title: "Due Soon", subtitle: "Not Important" },
   { quadrant: 4, title: "Not Due Soon", subtitle: "Not Important" },
 ];
+
+/** Fields of a todo document that undo/redo restores. */
+export const TODO_STORED_FIELDS = [
+  "subject",
+  "assignedTo",
+  "description",
+  "quadrant",
+  "dueAt",
+  "startAt",
+  "completed",
+  "assignedToId",
+  "originApp",
+  "originId",
+  "originLabel",
+] as const;
+
+export type TodoStoredField = (typeof TODO_STORED_FIELDS)[number];
+export type TodoSnapshot = Record<TodoStoredField, unknown>;
+
+/** Quadrant from the two questions of the method: important? urgent (due soon)? */
+export function quadrantFor(important: boolean, urgent: boolean): TodoQuadrant {
+  if (important) {
+    return urgent ? 1 : 2;
+  }
+  return urgent ? 3 : 4;
+}
+
+export function quadrantTraits(quadrant: TodoQuadrant) {
+  return { important: quadrant <= 2, urgent: quadrant === 1 || quadrant === 3 };
+}
+
+export function readTodoOrigin(data: Record<string, unknown> | null | undefined): TodoOrigin | null {
+  const app = normalizeText(data?.originApp).trim();
+  const id = normalizeText(data?.originId).trim();
+  if (!app || !id) {
+    return null;
+  }
+  const label = normalizeText(data?.originLabel).trim();
+  return label ? { app, id, label } : { app, id };
+}
+
+/** The stored fields of a todo, for undo. */
+export function snapshotTodo(todo: TodoItem): TodoSnapshot {
+  return {
+    subject: todo.subject,
+    assignedTo: todo.assignedTo,
+    description: todo.description,
+    quadrant: todo.quadrant,
+    dueAt: todo.dueAt,
+    startAt: todo.startAt,
+    completed: todo.completed,
+    assignedToId: todo.assignedToId,
+    originApp: todo.origin?.app ?? null,
+    originId: todo.origin?.id ?? null,
+    originLabel: todo.origin?.label ?? null,
+  };
+}
 
 export const EMPTY_TODO_DRAFT: TodoDraft = {
   subject: "",
@@ -155,6 +230,8 @@ export function readTodoItem(
   return {
     ...draft,
     id: summary.id,
+    assignedToId: normalizeText(data.assignedToId).trim() || null,
+    origin: readTodoOrigin(data),
     databaseId,
     selectionKey: buildTodoSelectionKey(databaseId, summary.id),
     attachments,

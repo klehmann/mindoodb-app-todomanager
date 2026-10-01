@@ -64,6 +64,8 @@ const todo: TodoItem = {
   updatedAt: null,
   attachmentCount: 0,
   attachments: [],
+      origin: null,
+      assignedToId: null,
 };
 
 describe("TodoQuadrant", () => {
