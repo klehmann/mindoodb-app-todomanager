@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
+import { onBeforeUnmount, onMounted, watch } from "vue";
 import Message from "primevue/message";
 import ProgressSpinner from "primevue/progressspinner";
 import Toast from "primevue/toast";
@@ -52,8 +52,36 @@ watch(
   },
 );
 
+function isTextInput(target: EventTarget | null) {
+  const element = target as HTMLElement | null;
+  return Boolean(
+    element &&
+      (element.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName)),
+  );
+}
+
+/** Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z (or Ctrl+Y); text fields keep their own undo. */
+function handleUndoShortcut(event: KeyboardEvent) {
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || isTextInput(event.target) || app.dialogVisible.value) {
+    return;
+  }
+  const key = event.key.toLowerCase();
+  if (key === "z" && !event.shiftKey) {
+    event.preventDefault();
+    void app.undoLastChange();
+  } else if ((key === "z" && event.shiftKey) || key === "y") {
+    event.preventDefault();
+    void app.redoLastChange();
+  }
+}
+
 onMounted(() => {
   void app.connect();
+  window.addEventListener("keydown", handleUndoShortcut);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", handleUndoShortcut);
 });
 
 async function handleFooterRecycleDrop(event: DragEvent) {

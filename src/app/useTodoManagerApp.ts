@@ -10,6 +10,7 @@ import {
   type MindooDBAppViewport,
 } from "mindoodb-app-sdk";
 
+import { useTodoAgentTools } from "@/features/agent/useTodoAgentTools";
 import { usePeriodicSync } from "@/features/sync/composables/usePeriodicSync";
 import { useTodos } from "@/features/todos/composables/useTodos";
 import type { TodoQuadrant, TodoSyncMode } from "@/features/todos/composables/todoTypes";
@@ -132,6 +133,15 @@ export function useTodoManagerApp() {
     busyAction,
     error,
     setSuccess,
+  });
+
+  useTodoAgentTools({
+    session,
+    databases,
+    selectedDatabaseIds,
+    preferredDatabaseId,
+    isTimeTravelActive,
+    todos,
   });
 
   const periodicSync = usePeriodicSync({

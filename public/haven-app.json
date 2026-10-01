@@ -8,6 +8,7 @@
   "runtime": "iframe",
   "hosting": "external",
   "defaultLaunchDatabaseId": "todomanager",
+  "agentToolPrefix": "todo",
   "databases": [
     {
       "logicalDatabaseId": "todomanager",
