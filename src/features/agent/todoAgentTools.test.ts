@@ -110,6 +110,11 @@ function setup(seed: Array<{ id: string; data: Record<string, unknown> }> = []) 
     redo: async (input) => await todos.todoUndo.redo(input),
     show: vi.fn(async () => undefined),
     userName: () => "Karsten Lehmann",
+    userId: () => "CN=Karsten Lehmann/O=Mindoo",
+    searchUsers: async (query) =>
+      ["CN=Paul Meyer/O=Mindoo", "CN=Paula Schmidt/O=Mindoo", "CN=Karsten Lehmann/O=Mindoo"]
+        .filter((userId) => userId.toLowerCase().includes(query.toLowerCase()))
+        .map((userId) => ({ userId, name: userId.slice(3).split("/")[0] })),
     context: () => ({
       you: { name: "Karsten Lehmann" },
       readOnly: false,
@@ -257,6 +262,31 @@ describe("todo agent tools", () => {
       "offsite",
     ]);
     expect((await call("list", { important: false })).todos.map((todo: any) => todo.todoId)).toEqual(["receipts"]);
+    unmount();
+  });
+
+  it("assigns todos to directory people and finds what Paul has to do today", async () => {
+    const { call, unmount } = setup([
+      seedTodo("typed", { subject: "Typed for Paul", assignedTo: "Paul", dueAt: "2026-10-02T00:00:00.000Z" }),
+      seedTodo("later", { subject: "Later", assignedTo: "Paul Meyer", dueAt: "2026-10-20T00:00:00.000Z" }),
+      seedTodo("mine", { subject: "Mine", dueAt: "2026-10-02T00:00:00.000Z" }),
+    ]);
+    const { users } = await call("users_search", { query: "paul" });
+    expect(users.map((user: any) => user.name)).toEqual(["Paul Meyer", "Paula Schmidt"]);
+    const paul = users[0].userId;
+
+    const created = await call("create", { todos: [{ subject: "Send offer", assigneeId: paul, due: "2026-10-02" }] });
+    expect(created.created[0]).toMatchObject({ assignee: "Paul Meyer", assigneeId: paul });
+
+    const today = await call("list", { assigneeId: paul, dueWithin: "today" });
+    expect(today.todos.map((todo: any) => todo.subject).sort()).toEqual(["Send offer", "Typed for Paul"]);
+    // Paul's todos are not the signed-in user's.
+    expect((await call("list", { forMe: true, dueWithin: "today" })).todos.map((todo: any) => todo.subject)).toEqual([
+      "Mine",
+    ]);
+    await expect(call("update", { todos: [{ todoId: "mine", assigneeId: paul, assignee: "x" }] })).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
     unmount();
   });
 

@@ -19,7 +19,8 @@
         "delete",
         "history",
         "attachments",
-        "views"
+        "views",
+        "directory"
       ]
     }
   ],

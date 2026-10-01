@@ -8,6 +8,7 @@
  */
 import {
   abbreviateCanonicalName,
+  MindooDBAppAgentToolError,
   type MindooDBAppDatabase,
   type MindooDBAppDatabaseInfo,
   type MindooDBAppSession,
@@ -16,6 +17,7 @@ import { computed, watch, type ComputedRef, type Ref } from "vue";
 
 import {
   createTodoAgentTools,
+  personName,
   toAgentTodo,
   type TodoAgentContext,
   type TodoAgentDeps,
@@ -106,6 +108,23 @@ export function useTodoAgentTools(options: {
     },
     context: () => context.value,
     userName: () => userName.value,
+    userId: () => options.userName.value,
+    searchUsers: async (query, limit) => {
+      const info = options.databases.value.find((database) => database.capabilities.includes("directory"));
+      const database = info ? await options.getDatabase(info.id) : null;
+      if (!database) {
+        throw new MindooDBAppAgentToolError(
+          "NOT_ALLOWED",
+          "TodoManager has no access to the tenant directory.",
+          "ask the user to grant TodoManager the directory permission in Haven (app settings, database mapping)",
+        );
+      }
+      if (typeof database.directory?.listUsers !== "function") {
+        throw new MindooDBAppAgentToolError("NOT_ALLOWED", "This Haven offers no directory search.");
+      }
+      const page = await database.directory.listUsers({ query, limit });
+      return page.users.slice(0, limit).map((userId) => ({ userId, name: personName(userId) }));
+    },
   };
   const tools = createTodoAgentTools(deps);
 

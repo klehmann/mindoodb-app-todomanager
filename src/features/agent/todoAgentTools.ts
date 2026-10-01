@@ -7,6 +7,7 @@
  * Every write is one undo step marked as made by an agent.
  */
 import {
+  abbreviateCanonicalName,
   MindooDBAppAgentToolError,
   type MindooDBAppAgentTool,
   type MindooDBAppDatabaseInfo,
@@ -45,6 +46,8 @@ export type AgentTodo = {
   completed: boolean;
   notes?: string;
   assignee?: string;
+  /** Directory user id when the assignee was picked from the directory. */
+  assigneeId?: string;
   start?: string;
   due?: string;
   overdue?: boolean;
@@ -97,6 +100,10 @@ export type TodoAgentDeps = {
   context: () => Omit<TodoAgentContext, "today" | "weekday">;
   /** The signed-in user's name (common name). */
   userName: () => string;
+  /** The signed-in user's directory id (canonical name). */
+  userId: () => string;
+  /** People in the tenant directory whose name contains `query`. */
+  searchUsers: (query: string, limit: number) => Promise<Array<{ userId: string; name: string }>>;
   /** Today as YYYY-MM-DD, injectable for tests. */
   today?: () => string;
 };
@@ -123,10 +130,29 @@ function weekOf(isoDay: string) {
   return { start: monday, end: addDays(monday, 6) };
 }
 
+/** Readable name of a directory user id: "CN=Paul Meyer/O=Acme" → "Paul Meyer". */
+export function personName(userId: string) {
+  return (abbreviateCanonicalName(userId) || userId).split("/")[0].trim();
+}
+
+function sameUser(left: string | null, right: string) {
+  const normalize = (value: string) => (abbreviateCanonicalName(value) || value).trim().toLowerCase();
+  return Boolean(left) && normalize(left!) === normalize(right);
+}
+
+/** Whether a todo is assigned to this person: by directory id, else by the name typed in. */
+function isAssignedTo(todo: TodoItem, userId: string, userName: string) {
+  if (todo.assignedToId) return sameUser(todo.assignedToId, userId);
+  return Boolean(todo.assignedTo.trim()) && namesPerson(todo.assignedTo, userName);
+}
+
 /** Whether `assignee` names the user: full name, or first/last name alone; empty = nobody else's. */
 function isForUser(assignee: string, userName: string) {
+  return !assignee.trim() || namesPerson(assignee, userName);
+}
+
+function namesPerson(assignee: string, userName: string) {
   const value = assignee.trim().toLowerCase();
-  if (!value) return true;
   const name = userName.trim().toLowerCase();
   if (!name) return false;
   return value === name || value.includes(name) || name.split(/\s+/).some((part) => part.length > 1 && value === part);
@@ -147,6 +173,7 @@ export function toAgentTodo(todo: TodoItem, today = todayIso()): AgentTodo {
     completed: todo.completed,
     ...(todo.description.trim() ? { notes: todo.description } : {}),
     ...(todo.assignedTo.trim() ? { assignee: todo.assignedTo } : {}),
+    ...(todo.assignedToId ? { assigneeId: todo.assignedToId } : {}),
     ...(day(todo.startAt) ? { start: day(todo.startAt) } : {}),
     ...(due ? { due } : {}),
     ...(due && !todo.completed && due < today ? { overdue: true } : {}),
@@ -245,6 +272,16 @@ function resolveQuadrant(entry: Record<string, unknown>, current: TodoQuadrant |
   return quadrantFor(important ?? base.important, urgent ?? base.urgent);
 }
 
+/** assignedTo/assignedToId from assigneeId (directory) or assignee (free text); `fallback` when neither is given. */
+function assigneeFields(entry: Record<string, unknown>, fallback: Partial<TodoSnapshot>): Partial<TodoSnapshot> {
+  const assigneeId = optionalString(entry, "assigneeId");
+  const hasText = typeof entry.assignee === "string";
+  if (assigneeId && hasText) invalid("Give either assigneeId or assignee, not both.");
+  if (assigneeId) return { assignedTo: personName(assigneeId), assignedToId: assigneeId };
+  if (hasText) return { assignedTo: (entry.assignee as string).trim(), assignedToId: null };
+  return fallback;
+}
+
 function originFields(origin: { app: string; id: string; label?: string } | null): Partial<TodoSnapshot> {
   return origin
     ? { originApp: origin.app, originId: origin.id, originLabel: origin.label ?? null }
@@ -258,7 +295,11 @@ const TODO_FIELDS_SCHEMA = {
   important: { type: "boolean", description: "Important? Together with urgent this picks the quadrant." },
   urgent: { type: "boolean", description: "Urgent / due soon? Together with important this picks the quadrant." },
   quadrant: { type: "integer", enum: [1, 2, 3, 4], description: "Set the quadrant directly instead of important/urgent." },
-  assignee: { type: "string", description: "Who does it (free text, usually a name). \"\" clears it." },
+  assigneeId: {
+    type: "string",
+    description: "Assign to a person from the directory: a userId from todo_users_search. Preferred over assignee.",
+  },
+  assignee: { type: "string", description: "Who does it as free text, for people outside the directory. \"\" clears it." },
   start: { type: ["string", "null"], description: "Start date YYYY-MM-DD, null clears it." },
   due: { type: ["string", "null"], description: "Due date YYYY-MM-DD, null clears it." },
 } as const;
@@ -362,7 +403,9 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
       "appear literally) and text, a topic search over the full-text index that also finds word beginnings and " +
       "small typos and ranks by relevance (match any for a rough topic search). Without text, sorted by " +
       "quadrant, then due date. For \"what do I have to do this week\": forMe with dueWithin this_week " +
-      "(includes overdue), and also look at quadrant 1 todos without a due date, which are urgent by definition.",
+      "(includes overdue), and also look at quadrant 1 todos without a due date, which are urgent by definition. " +
+      "For another person (\"what does Paul have to do today\"): find them with todo_users_search, then pass " +
+      "assigneeId.",
     inputSchema: {
       type: "object",
       properties: {
@@ -380,7 +423,12 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
           description: "For text: all words must match (default) or any of them (rough topic search).",
         },
         exact: { type: "string", description: "Words that must appear literally in subject or notes." },
-        assignee: { type: "string", description: "Part of the assignee's name." },
+        assignee: { type: "string", description: "Part of the assignee's name as typed." },
+        assigneeId: {
+          type: "string",
+          description:
+            "Todos of one person: a userId from todo_users_search. Also finds todos where that person's name was typed in.",
+        },
         forMe: {
           type: "boolean",
           description: "Only todos assigned to the signed-in user or to nobody (assignee is free text).",
@@ -422,6 +470,7 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
       const exact = optionalString(input, "exact");
       const assignee = optionalString(input, "assignee")?.toLowerCase();
       const forMe = optionalBoolean(input, "forMe");
+      const assigneeId = optionalString(input, "assigneeId");
       const overdue = optionalBoolean(input, "overdue");
       const dueWithin = optionalString(input, "dueWithin");
       if (dueWithin && !["today", "this_week", "next_week"].includes(dueWithin)) {
@@ -472,7 +521,12 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
       const matching = results
         .flatMap((result) => result.todos)
         .filter(({ todo }) => !assignee || todo.assignedTo.toLowerCase().includes(assignee))
-        .filter(({ todo }) => !forMe || isForUser(todo.assignedTo, userName))
+        .filter(({ todo }) => !assigneeId || isAssignedTo(todo, assigneeId, personName(assigneeId)))
+        .filter(
+          ({ todo }) =>
+            !forMe ||
+            (todo.assignedToId ? sameUser(todo.assignedToId, deps.userId()) : isForUser(todo.assignedTo, userName)),
+        )
         .sort((left, right) =>
           text && left.score !== undefined && right.score !== undefined
             ? right.score - left.score
@@ -495,6 +549,30 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
           ...(score !== undefined ? { score } : {}),
         })),
       };
+    },
+  };
+
+  const usersSearch: MindooDBAppAgentTool = {
+    name: "users_search",
+    description:
+      "Finds people in the tenant directory by part of their name, e.g. a first name. Returns userId and " +
+      "readable name, for assigneeId in todo_create, todo_update and todo_list. If several people fit, ask the " +
+      "user which one is meant.",
+    inputSchema: {
+      type: "object",
+      required: ["query"],
+      properties: {
+        query: { type: "string", description: "Part of the name." },
+        limit: { type: "integer", minimum: 1, maximum: 50, description: "Default 10." },
+      },
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
+    async execute(input) {
+      const query = optionalString(input, "query");
+      if (!query) invalid('Missing "query".');
+      const limitValue = input.limit;
+      const limit = typeof limitValue === "number" && Number.isInteger(limitValue) ? Math.min(Math.max(limitValue, 1), 50) : 10;
+      return { users: await deps.searchUsers(query, limit) };
     },
   };
 
@@ -560,7 +638,7 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
             subject,
             description: optionalString(entry, "notes") ?? "",
             quadrant: resolveQuadrant(entry, null) ?? 2,
-            assignedTo: optionalString(entry, "assignee") ?? "",
+            ...assigneeFields(entry, { assignedTo: "", assignedToId: null }),
             startAt: optionalDate(entry, "start") ?? null,
             dueAt: optionalDate(entry, "due") ?? null,
             completed: false,
@@ -614,7 +692,7 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
         const subject = optionalString(entry, "subject");
         if (subject) set.subject = subject;
         if (typeof entry.notes === "string") set.description = entry.notes;
-        if (typeof entry.assignee === "string") set.assignedTo = entry.assignee.trim();
+        Object.assign(set, assigneeFields(entry, {}));
         const quadrant = resolveQuadrant(entry, todo.quadrant);
         if (quadrant !== undefined) set.quadrant = quadrant;
         const start = optionalDate(entry, "start");
@@ -785,5 +863,5 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
     },
   };
 
-  return [getContext, list, create, update, complete, remove, show, history, undo, redo];
+  return [getContext, list, usersSearch, create, update, complete, remove, show, history, undo, redo];
 }

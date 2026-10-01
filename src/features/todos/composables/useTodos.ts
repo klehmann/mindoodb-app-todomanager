@@ -1041,13 +1041,16 @@ export function useTodos(options: UseTodosOptions) {
       const database = await requireDatabase(input.databaseId);
       const fields: TodoSnapshot = {
         ...EMPTY_TODO_DRAFT,
+        assignedToId: null,
         originApp: null,
         originId: null,
         originLabel: null,
         ...input.fields,
       };
       const stored = Object.fromEntries(
-        Object.entries(fields).filter(([key, value]) => !(key.startsWith("origin") && value === null)),
+        Object.entries(fields).filter(
+          ([key, value]) => !((key.startsWith("origin") || key === "assignedToId") && value === null),
+        ),
       );
       const now = new Date().toISOString();
       const created = await database.documents.create({ set: { ...stored, createdAt: now, updatedAt: now } });
@@ -1204,8 +1207,19 @@ export function useTodos(options: UseTodosOptions) {
           throw new Error("The todo could not be found.");
         }
 
+        // A typed assignee no longer names the directory person picked before.
+        const assigneeChanged = draft.value.assignedTo.trim() !== current.assignedTo.trim();
         await editTodos(
-          [{ todo: current, set: { ...draft.value, subject: nextSubject } }],
+          [
+            {
+              todo: current,
+              set: {
+                ...draft.value,
+                subject: nextSubject,
+                ...(assigneeChanged && current.assignedToId ? { assignedToId: null } : {}),
+              },
+            },
+          ],
           `Edit "${nextSubject}"`,
         );
         setSelectedTodoIds([current.selectionKey]);

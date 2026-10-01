@@ -132,7 +132,10 @@ Document shape helpers live in
 Todos that another app (or an agent on its behalf) created may also carry
 an origin: `originApp`, `originId`, `originLabel` (e.g. `vega`,
 `<mapId>/<nodeId>`). The UI does not show them; agents use them to find a
-todo again instead of creating a duplicate.
+todo again instead of creating a duplicate. `assignedToId` holds the
+directory user id when a todo was assigned to a person from the tenant
+directory (`assignedTo` then carries the readable name); typing a different
+assignee in the dialog clears it.
 
 ## Undo and redo
 
@@ -160,7 +163,8 @@ Agents get the method in plain words: quadrant 1 = important and urgent,
 | Tool | What it does |
 | --- | --- |
 | `todo_get_context` | Today's date and weekday, the signed-in user, and what the user sees: databases, filter, open todos per quadrant, selection, todo open in the dialog. |
-| `todo_list` | Finds todos. Exact: status (default open), quadrant, important/urgent, dates, `dueWithin` (today, this week, next week), overdue, origin and `exact` words, as a `documents.query` filter; plus assignee and `forMe`. Topics: `text` through the full-text index (prefixes, small typos, ranked; `match: "any"` for a rough search), with a substring fallback where the index is off. |
+| `todo_list` | Finds todos. Exact: status (default open), quadrant, important/urgent, dates, `dueWithin` (today, this week, next week), overdue, origin and `exact` words, as a `documents.query` filter; plus assignee, `assigneeId` (a person from the directory, also matching their typed name) and `forMe`. Topics: `text` through the full-text index (prefixes, small typos, ranked; `match: "any"` for a rough search), with a substring fallback where the index is off. |
+| `todo_users_search` | People in the tenant directory by part of their name (needs the `directory` permission). |
 | `todo_create` | New todos with subject, notes, important/urgent or quadrant, assignee, dates, origin; no duplicates per origin. |
 | `todo_update` | Change fields or move between quadrants (`urgent: false`, `important: false`, or `quadrant`). |
 | `todo_complete` | Tick todos off (they leave the board) or reopen them. |
@@ -171,6 +175,8 @@ Agents get the method in plain words: quadrant 1 = important and urgent,
 Example requests:
 
 - "What should I work on today?" (quadrant 1 and overdue todos)
+- "What does Paul have to do today?" (`todo_users_search` "Paul", then `assigneeId` + `dueWithin: today`)
+- "Assign *Send offer* to Paul." (stores his directory id, so renames and namesakes do not confuse the search)
 - "What do I have to do this week?" (`forMe` + `dueWithin: this_week`, plus quadrant 1 without a date)
 - "Add a todo: call the tax advisor by Friday, important and urgent."
 - "The task *Website copy* is no longer urgent." / "*Team offsite* is no longer important."

@@ -34,6 +34,12 @@ export type TodoOrigin = {
 
 export type TodoItem = TodoDraft & {
   id: string;
+  /**
+   * Directory user id (canonical name) of the assignee when the todo was
+   * assigned to a person from the tenant directory; `assignedTo` then holds
+   * that person's readable name. `null` for free-text assignees.
+   */
+  assignedToId: string | null;
   origin: TodoOrigin | null;
   databaseId: string;
   selectionKey: string;
@@ -66,6 +72,7 @@ export const TODO_STORED_FIELDS = [
   "dueAt",
   "startAt",
   "completed",
+  "assignedToId",
   "originApp",
   "originId",
   "originLabel",
@@ -106,6 +113,7 @@ export function snapshotTodo(todo: TodoItem): TodoSnapshot {
     dueAt: todo.dueAt,
     startAt: todo.startAt,
     completed: todo.completed,
+    assignedToId: todo.assignedToId,
     originApp: todo.origin?.app ?? null,
     originId: todo.origin?.id ?? null,
     originLabel: todo.origin?.label ?? null,
@@ -222,6 +230,7 @@ export function readTodoItem(
   return {
     ...draft,
     id: summary.id,
+    assignedToId: normalizeText(data.assignedToId).trim() || null,
     origin: readTodoOrigin(data),
     databaseId,
     selectionKey: buildTodoSelectionKey(databaseId, summary.id),
