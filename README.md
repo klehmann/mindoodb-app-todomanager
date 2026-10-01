@@ -129,6 +129,58 @@ writes are:
 Document shape helpers live in
 [`src/features/todos/composables/todoTypes.ts`](./src/features/todos/composables/todoTypes.ts).
 
+Todos that another app (or an agent on its behalf) created may also carry
+an origin: `originApp`, `originId`, `originLabel` (e.g. `vega`,
+`<mapId>/<nodeId>`). The UI does not show them; agents use them to find a
+todo again instead of creating a duplicate.
+
+## Undo and redo
+
+Every change (create, edit, move, complete, delete; from the UI or from an
+agent) is one step in a session-long history
+([`src/features/undo/todoUndo.ts`](./src/features/undo/todoUndo.ts)): the
+touched todos with their fields before and after. Undo writes the old state
+back and brings deleted todos back with `undelete`, so they keep their id.
+The toolbar arrows next to **New todo** and Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z
+trigger it.
+
+## AI agents (WebMCP)
+
+TodoManager offers its board to AI agents through Haven's agent tools
+(WebMCP). Haven needs **Settings → General → Agent tools** on and **Offer
+tools to AI agents** ticked for TodoManager; the console then logs
+`[TodoManager] Offered 10 agent tools to Haven.` The tools carry the prefix
+`todo_` (`agentToolPrefix` in `public/haven-app.json`). Code:
+[`src/features/agent`](./src/features/agent).
+
+Agents get the method in plain words: quadrant 1 = important and urgent,
+2 = important, 3 = urgent, 4 = neither, and each todo with `important` and
+`urgent` flags, so "no longer urgent" becomes a move from 1 to 2 (or 3 to 4).
+
+| Tool | What it does |
+| --- | --- |
+| `todo_get_context` | What the user sees: databases, filter, open todos per quadrant, selection, todo open in the dialog. |
+| `todo_list` | Todos filtered by status (default open), quadrant, important/urgent, text, assignee, due dates, overdue, origin. |
+| `todo_create` | New todos with subject, notes, important/urgent or quadrant, assignee, dates, origin; no duplicates per origin. |
+| `todo_update` | Change fields or move between quadrants (`urgent: false`, `important: false`, or `quadrant`). |
+| `todo_complete` | Tick todos off (they leave the board) or reopen them. |
+| `todo_delete` | Delete todos; Haven asks the user first. |
+| `todo_show` | Select todos, open one in its dialog, switch filter or the visible quadrant on phones. |
+| `todo_history`, `todo_undo`, `todo_redo` | Session history; undo an agent's change by its step id. User steps only with `includeUserSteps`. |
+
+Example requests:
+
+- "What should I work on today?" (quadrant 1 and overdue todos)
+- "Add a todo: call the tax advisor by Friday, important and urgent."
+- "The task *Website copy* is no longer urgent." / "*Team offsite* is no longer important."
+- "Tick off *Pay invoice*." / "Reopen the todo I just completed."
+- "What is overdue, and which of those could move to quadrant 2?"
+- "Move everything assigned to Paul that is not important to quadrant 4."
+- "Clean up: delete all completed todos in quadrant 4." (Haven asks first)
+- "What did I get done this week?" (completed todos by last change)
+- "Create a todo for every open task in the Vega map *Relaunch 2027*." (with origin, so running it again adds nothing twice)
+- "Undo that."
+
 ## Visual treatment
 
 The board follows Haven's theme through `onThemeChange` and maps the
