@@ -54,6 +54,11 @@ export type AgentTodo = {
 };
 
 export type TodoAgentContext = {
+  /** Today's date and weekday, so "this week" needs no guessing. */
+  today: string;
+  weekday: string;
+  /** The signed-in user, for "my todos". */
+  you: { name: string };
   readOnly: boolean;
   databases: Array<{ databaseId: string; title: string; shown: boolean; canCreate: boolean }>;
   filter: TodoFilterMode;
@@ -83,7 +88,9 @@ export type TodoAgentDeps = {
   undo: (input: { stepId?: string; includeUserSteps?: boolean }) => Promise<TodoUndoStep[]>;
   redo: (input: { stepId?: string }) => Promise<TodoUndoStep[]>;
   show: (input: { todoKeys: string[]; openKey?: string; filter?: TodoFilterMode; quadrant?: TodoQuadrant }) => Promise<void>;
-  context: () => TodoAgentContext;
+  context: () => Omit<TodoAgentContext, "today" | "weekday">;
+  /** The signed-in user's name (common name). */
+  userName: () => string;
   /** Today as YYYY-MM-DD, injectable for tests. */
   today?: () => string;
 };
@@ -93,6 +100,30 @@ const MAX_BATCH = 100;
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function addDays(isoDay: string, days: number) {
+  const date = new Date(`${isoDay}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/** Monday and Sunday of the week `isoDay` is in (ISO weeks start on Monday). */
+function weekOf(isoDay: string) {
+  const weekday = new Date(`${isoDay}T00:00:00.000Z`).getUTCDay();
+  const monday = addDays(isoDay, -((weekday + 6) % 7));
+  return { start: monday, end: addDays(monday, 6) };
+}
+
+/** Whether `assignee` names the user: full name, or first/last name alone; empty = nobody else's. */
+function isForUser(assignee: string, userName: string) {
+  const value = assignee.trim().toLowerCase();
+  if (!value) return true;
+  const name = userName.trim().toLowerCase();
+  if (!name) return false;
+  return value === name || value.includes(name) || name.split(/\s+/).some((part) => part.length > 1 && value === part);
 }
 
 function day(value: string | null) {
@@ -314,7 +345,13 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
     inputSchema: { type: "object", properties: {} },
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     async execute() {
-      return { quadrants: QUADRANT_GUIDE, ...deps.context() };
+      const now = today();
+      return {
+        today: now,
+        weekday: WEEKDAYS[new Date(`${now}T00:00:00.000Z`).getUTCDay()],
+        quadrants: QUADRANT_GUIDE,
+        ...deps.context(),
+      };
     },
   };
 
@@ -323,7 +360,9 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
     description:
       `Lists todos with todoId, subject, quadrant (with important/urgent), notes, assignee, start/due dates, ` +
       `overdue and origin. ${QUADRANT_HELP} By default only open (not completed) todos of all databases; filter ` +
-      "by quadrant, importance, urgency, text, assignee, dates or origin. Sorted by quadrant, then due date.",
+      "by quadrant, importance, urgency, text, assignee, dates or origin. Sorted by quadrant, then due date. " +
+      "For \"what do I have to do this week\": forMe with dueWithin this_week (includes overdue), and also look at " +
+      "quadrant 1 todos without a due date, which are urgent by definition.",
     inputSchema: {
       type: "object",
       properties: {
@@ -336,6 +375,15 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
         dueBefore: { type: "string", description: "YYYY-MM-DD, inclusive." },
         dueAfter: { type: "string", description: "YYYY-MM-DD, inclusive." },
         overdue: { type: "boolean", description: "Only open todos whose due date has passed." },
+        dueWithin: {
+          type: "string",
+          enum: ["today", "this_week", "next_week"],
+          description: "Due today / by Sunday of this week / during next week (Mon–Sun). today and this_week include overdue todos.",
+        },
+        forMe: {
+          type: "boolean",
+          description: "Only todos assigned to the signed-in user or to nobody (assignee is free text).",
+        },
         origin: {
           type: "object",
           description: "Only todos from this origin: { app } or { app, id }.",
@@ -360,6 +408,12 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
       const dueBefore = optionalDate(input, "dueBefore")?.slice(0, 10);
       const dueAfter = optionalDate(input, "dueAfter")?.slice(0, 10);
       const overdue = optionalBoolean(input, "overdue");
+      const dueWithin = optionalString(input, "dueWithin");
+      if (dueWithin && !["today", "this_week", "next_week"].includes(dueWithin)) {
+        invalid("dueWithin must be today, this_week or next_week.");
+      }
+      const forMe = optionalBoolean(input, "forMe");
+      const userName = deps.userName();
       const origin = input.origin as { app?: unknown; id?: unknown } | undefined;
       const originApp = typeof origin?.app === "string" ? origin.app.trim().toLowerCase() : undefined;
       const originId = typeof origin?.id === "string" ? origin.id.trim() : undefined;
@@ -367,6 +421,15 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
       const limit =
         typeof limitValue === "number" && Number.isInteger(limitValue) ? Math.min(Math.max(limitValue, 1), MAX_LIST) : 100;
       const now = today();
+      const week = weekOf(now);
+      const within =
+        dueWithin === "today"
+          ? { from: undefined, to: now }
+          : dueWithin === "this_week"
+            ? { from: undefined, to: week.end }
+            : dueWithin === "next_week"
+              ? { from: addDays(week.end, 1), to: addDays(week.end, 7) }
+              : null;
 
       const matching = (await loadAll(optionalString(input, "databaseId")))
         .filter((todo) => (status === "open" ? !todo.completed : status === "completed" ? todo.completed : true))
@@ -378,6 +441,12 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
         .filter((todo) => !dueBefore || (day(todo.dueAt) !== undefined && day(todo.dueAt)! <= dueBefore))
         .filter((todo) => !dueAfter || (day(todo.dueAt) !== undefined && day(todo.dueAt)! >= dueAfter))
         .filter((todo) => !overdue || (!todo.completed && day(todo.dueAt) !== undefined && day(todo.dueAt)! < now))
+        .filter((todo) => {
+          if (!within) return true;
+          const due = day(todo.dueAt);
+          return due !== undefined && (!within.from || due >= within.from) && due <= within.to;
+        })
+        .filter((todo) => !forMe || isForUser(todo.assignedTo, userName))
         .filter((todo) => !originApp || todo.origin?.app === originApp)
         .filter((todo) => !originId || todo.origin?.id === originId)
         .sort(

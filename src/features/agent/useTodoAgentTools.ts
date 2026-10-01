@@ -6,7 +6,7 @@
  * happens. Whether agents can actually call the tools is Haven's decision
  * (global switch plus the per-app permission).
  */
-import type { MindooDBAppDatabaseInfo, MindooDBAppSession } from "mindoodb-app-sdk";
+import { abbreviateCanonicalName, type MindooDBAppDatabaseInfo, type MindooDBAppSession } from "mindoodb-app-sdk";
 import { computed, watch, type ComputedRef, type Ref } from "vue";
 
 import {
@@ -26,11 +26,18 @@ export function useTodoAgentTools(options: {
   selectedDatabaseIds: Ref<string[]>;
   preferredDatabaseId: ComputedRef<string | null>;
   isTimeTravelActive: ComputedRef<boolean>;
+  /** Canonical name of the signed-in user (CN=…/O=…). */
+  userName: ComputedRef<string>;
   todos: ReturnType<typeof useTodos>;
 }) {
   const { todos } = options;
 
-  const context = computed<TodoAgentContext>(() => {
+  const userName = computed(() => {
+    const raw = options.userName.value;
+    return raw ? abbreviateCanonicalName(raw).split("/")[0] : "";
+  });
+
+  const context = computed<Omit<TodoAgentContext, "today" | "weekday">>(() => {
     const openCounts: Record<TodoQuadrant, number> = { 1: 0, 2: 0, 3: 0, 4: 0 };
     for (const todo of todos.todos.value) {
       if (!todo.completed) openCounts[todo.quadrant] += 1;
@@ -40,6 +47,7 @@ export function useTodoAgentTools(options: {
         ? (todos.todos.value.find((todo) => todo.selectionKey === todos.dialogTodoId.value) ?? null)
         : null;
     return {
+      you: { name: userName.value },
       readOnly: options.isTimeTravelActive.value,
       databases: options.databases.value.map((info) => ({
         databaseId: info.id,
@@ -80,6 +88,7 @@ export function useTodoAgentTools(options: {
       if (openKey) await todos.openTodo(openKey);
     },
     context: () => context.value,
+    userName: () => userName.value,
   };
   const tools = createTodoAgentTools(deps);
 

@@ -141,6 +141,7 @@ export function useTodoManagerApp() {
     selectedDatabaseIds,
     preferredDatabaseId,
     isTimeTravelActive,
+    userName: computed(() => launchContext.value?.user.username ?? ""),
     todos,
   });
 

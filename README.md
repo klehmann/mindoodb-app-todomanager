@@ -159,8 +159,8 @@ Agents get the method in plain words: quadrant 1 = important and urgent,
 
 | Tool | What it does |
 | --- | --- |
-| `todo_get_context` | What the user sees: databases, filter, open todos per quadrant, selection, todo open in the dialog. |
-| `todo_list` | Todos filtered by status (default open), quadrant, important/urgent, text, assignee, due dates, overdue, origin. |
+| `todo_get_context` | Today's date and weekday, the signed-in user, and what the user sees: databases, filter, open todos per quadrant, selection, todo open in the dialog. |
+| `todo_list` | Todos filtered by status (default open), quadrant, important/urgent, text, assignee, `forMe`, due dates, `dueWithin` (today, this week, next week), overdue, origin. |
 | `todo_create` | New todos with subject, notes, important/urgent or quadrant, assignee, dates, origin; no duplicates per origin. |
 | `todo_update` | Change fields or move between quadrants (`urgent: false`, `important: false`, or `quadrant`). |
 | `todo_complete` | Tick todos off (they leave the board) or reopen them. |
@@ -171,6 +171,7 @@ Agents get the method in plain words: quadrant 1 = important and urgent,
 Example requests:
 
 - "What should I work on today?" (quadrant 1 and overdue todos)
+- "What do I have to do this week?" (`forMe` + `dueWithin: this_week`, plus quadrant 1 without a date)
 - "Add a todo: call the tax advisor by Friday, important and urgent."
 - "The task *Website copy* is no longer urgent." / "*Team offsite* is no longer important."
 - "Tick off *Pay invoice*." / "Reopen the todo I just completed."

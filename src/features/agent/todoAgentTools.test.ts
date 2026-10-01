@@ -73,7 +73,9 @@ function setup(seed: Array<{ id: string; data: Record<string, unknown> }> = []) 
     undo: async (input) => await todos.todoUndo.undo({ ...input, byAgent: true }),
     redo: async (input) => await todos.todoUndo.redo(input),
     show: vi.fn(async () => undefined),
+    userName: () => "Karsten Lehmann",
     context: () => ({
+      you: { name: "Karsten Lehmann" },
       readOnly: false,
       databases: [],
       filter: "open",
@@ -178,6 +180,22 @@ describe("todo agent tools", () => {
     expect((await call("list")).total).toBe(0);
     const history = await call("history");
     expect(history.steps.map((step: any) => step.state)).toEqual(["done", "done"]);
+    unmount();
+  });
+
+  it("answers 'what do I have to do this week' with forMe and dueWithin", async () => {
+    // 2026-10-02 is a Friday; the week ends on Sunday 2026-10-04.
+    const { call, unmount } = setup([
+      seedTodo("overdue", { dueAt: "2026-09-28T00:00:00.000Z" }),
+      seedTodo("sunday", { dueAt: "2026-10-04T00:00:00.000Z", assignedTo: "Karsten" }),
+      seedTodo("monday", { dueAt: "2026-10-05T00:00:00.000Z" }),
+      seedTodo("pauls", { dueAt: "2026-10-03T00:00:00.000Z", assignedTo: "Paul" }),
+    ]);
+    const thisWeek = await call("list", { dueWithin: "this_week", forMe: true });
+    expect(thisWeek.todos.map((todo: any) => todo.todoId).sort()).toEqual(["overdue", "sunday"]);
+    const nextWeek = await call("list", { dueWithin: "next_week" });
+    expect(nextWeek.todos.map((todo: any) => todo.todoId)).toEqual(["monday"]);
+    expect((await call("get_context")).weekday).toBe("Friday");
     unmount();
   });
 
