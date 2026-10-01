@@ -33,7 +33,7 @@ function createMemoryDatabase(seed: Array<{ id: string; data: Record<string, unk
           .filter(
             ([id, doc]) =>
               !options.filter ||
-              evaluateExpression(options.filter, { doc: doc.data, values: {}, origin: "", docId: id, variables: {} }) === true,
+              evaluateExpression(options.filter, { doc: doc.data, values: {}, origin: "", variables: {} }) === true,
           )
           .map(([id, doc]) => {
             if (!options.text) return { docId: id, fields: { ...doc.data }, lastModified: 0 };
