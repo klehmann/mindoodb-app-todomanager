@@ -2,7 +2,10 @@ import { MindooDBAppAgentToolError, type MindooDBAppDatabaseInfo } from "mindood
 import { computed, ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
+import { evaluateExpression } from "mindoodb-view-language";
+
 import { createTodoAgentTools, type TodoAgentDeps } from "@/features/agent/todoAgentTools";
+import { searchTodos } from "@/features/agent/todoSearch";
 import { useTodos } from "@/features/todos/composables/useTodos";
 import { withSetup } from "@/test-utils/withSetup";
 
@@ -10,9 +13,40 @@ import { withSetup } from "@/test-utils/withSetup";
 function createMemoryDatabase(seed: Array<{ id: string; data: Record<string, unknown> }> = []) {
   const docs = new Map(seed.map((doc) => [doc.id, { data: { ...doc.data }, deleted: false }]));
   let counter = 0;
+  const fulltext = { enabled: false };
   return {
     docs,
+    fulltext,
+    getFulltextSetup: vi.fn(async () => ({ enabled: fulltext.enabled })),
+    setFulltextSetup: vi.fn(async (setup: { enabled: boolean }) => {
+      fulltext.enabled = setup.enabled;
+    }),
     documents: {
+      // Filter through the real expression evaluator; text through a crude
+      // stand-in for the index: word prefixes, score = matched words.
+      query: vi.fn(async (options: { filter?: any; text?: { query: string; combineWith?: string } }) => {
+        if (options.text && !fulltext.enabled) {
+          throw Object.assign(new Error("fulltext-not-enabled"), { code: "fulltext-not-enabled" });
+        }
+        const rows = [...docs.entries()]
+          .filter(([, doc]) => !doc.deleted)
+          .filter(
+            ([id, doc]) =>
+              !options.filter ||
+              evaluateExpression(options.filter, { doc: doc.data, values: {}, origin: "", docId: id, variables: {} }) === true,
+          )
+          .map(([id, doc]) => {
+            if (!options.text) return { docId: id, fields: { ...doc.data }, lastModified: 0 };
+            const words = String(doc.data.subject) + " " + String(doc.data.description ?? "");
+            const tokens = words.toLowerCase().split(/\W+/);
+            const terms = options.text.query.toLowerCase().split(/\s+/);
+            const hits = terms.filter((term) => tokens.some((token) => token.startsWith(term))).length;
+            const ok = options.text.combineWith === "OR" ? hits > 0 : hits === terms.length;
+            return ok ? { docId: id, fields: { ...doc.data }, lastModified: 0, textScore: hits } : null;
+          })
+          .filter(Boolean);
+        return { rows, total: rows.length };
+      }),
       list: vi.fn(async () => ({
         items: [...docs.entries()]
           .filter(([, doc]) => !doc.deleted)
@@ -66,6 +100,8 @@ function setup(seed: Array<{ id: string; data: Record<string, unknown> }> = []) 
     defaultDatabaseId: () => "main",
     readOnly: () => false,
     loadTodos: async (databaseId) => await todos.listDatabaseTodos(databaseId),
+    searchTodos: async (databaseId, criteria) =>
+      await searchTodos(database as never, databaseId, criteria, { mayEnableFulltext: true }),
     createTodos: async (inputs, label) => await todos.createTodos(inputs, label, true),
     editTodos: async (edits, label) => await todos.editTodos(edits, label, true),
     removeTodos: async (list, label) => await todos.removeTodos(list, label, true),
@@ -196,6 +232,31 @@ describe("todo agent tools", () => {
     const nextWeek = await call("list", { dueWithin: "next_week" });
     expect(nextWeek.todos.map((todo: any) => todo.todoId)).toEqual(["monday"]);
     expect((await call("get_context")).weekday).toBe("Friday");
+    unmount();
+  });
+
+  it("searches exactly through the query filter and by topic through the full-text index", async () => {
+    const { call, database, unmount } = setup([
+      seedTodo("tax", { subject: "Steuererklärung abgeben", description: "Belege sammeln", quadrant: 1 }),
+      seedTodo("receipts", { subject: "Belege scannen", quadrant: 3 }),
+      seedTodo("offsite", { subject: "Team offsite planen", quadrant: 2, completed: true }),
+    ]);
+    // Exact words: literal substring in subject or notes, done by the DB query.
+    const exact = await call("list", { exact: "belege" });
+    expect(exact.todos.map((todo: any) => todo.todoId).sort()).toEqual(["receipts", "tax"]);
+    expect(database.fulltext.enabled).toBe(false);
+
+    // Topic: switches the index on, matches word beginnings, ranks by score.
+    const topic = await call("list", { text: "steuer beleg", match: "any" });
+    expect(topic.textSearch).toBe("full-text index");
+    expect(topic.todos.map((todo: any) => todo.todoId)).toEqual(["tax", "receipts"]);
+    expect(topic.todos[0].score).toBeGreaterThan(topic.todos[1].score);
+
+    // Exact criteria still apply alongside text.
+    expect((await call("list", { text: "team", status: "completed" })).todos.map((todo: any) => todo.todoId)).toEqual([
+      "offsite",
+    ]);
+    expect((await call("list", { important: false })).todos.map((todo: any) => todo.todoId)).toEqual(["receipts"]);
     unmount();
   });
 

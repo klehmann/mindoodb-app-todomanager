@@ -142,6 +142,7 @@ export function useTodoManagerApp() {
     preferredDatabaseId,
     isTimeTravelActive,
     userName: computed(() => launchContext.value?.user.username ?? ""),
+    getDatabase: async (databaseId) => await openDatabaseById(databaseId),
     todos,
   });
 

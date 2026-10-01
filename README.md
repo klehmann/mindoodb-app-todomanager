@@ -160,7 +160,7 @@ Agents get the method in plain words: quadrant 1 = important and urgent,
 | Tool | What it does |
 | --- | --- |
 | `todo_get_context` | Today's date and weekday, the signed-in user, and what the user sees: databases, filter, open todos per quadrant, selection, todo open in the dialog. |
-| `todo_list` | Todos filtered by status (default open), quadrant, important/urgent, text, assignee, `forMe`, due dates, `dueWithin` (today, this week, next week), overdue, origin. |
+| `todo_list` | Finds todos. Exact: status (default open), quadrant, important/urgent, dates, `dueWithin` (today, this week, next week), overdue, origin and `exact` words, as a `documents.query` filter; plus assignee and `forMe`. Topics: `text` through the full-text index (prefixes, small typos, ranked; `match: "any"` for a rough search), with a substring fallback where the index is off. |
 | `todo_create` | New todos with subject, notes, important/urgent or quadrant, assignee, dates, origin; no duplicates per origin. |
 | `todo_update` | Change fields or move between quadrants (`urgent: false`, `important: false`, or `quadrant`). |
 | `todo_complete` | Tick todos off (they leave the board) or reopen them. |
@@ -179,6 +179,7 @@ Example requests:
 - "Move everything assigned to Paul that is not important to quadrant 4."
 - "Clean up: delete all completed todos in quadrant 4." (Haven asks first)
 - "What did I get done this week?" (completed todos by last change)
+- "Do I have anything about taxes or receipts?" (topic search: `text: "tax receipt"`, `match: "any"`)
 - "Create a todo for every open task in the Vega map *Relaunch 2027*." (with origin, so running it again adds nothing twice)
 - "Undo that."
 

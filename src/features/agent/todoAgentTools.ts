@@ -20,6 +20,7 @@ import {
   type TodoQuadrant,
   type TodoSnapshot,
 } from "@/features/todos/composables/todoTypes";
+import type { TodoSearchCriteria, TodoSearchMode } from "@/features/agent/todoSearch";
 import { TodoUndoRefusedError, type TodoUndoStep } from "@/features/undo/todoUndo";
 
 /** What the four quadrants mean, in the words agents get. */
@@ -75,6 +76,11 @@ export type TodoAgentDeps = {
   defaultDatabaseId: () => string | null;
   readOnly: () => boolean;
   loadTodos: (databaseId: string) => Promise<TodoItem[]>;
+  /** Exact criteria through the summary buffer, topics through the full-text index. */
+  searchTodos: (
+    databaseId: string,
+    criteria: TodoSearchCriteria,
+  ) => Promise<{ todos: Array<{ todo: TodoItem; score?: number }>; mode: TodoSearchMode }>;
   createTodos: (
     inputs: Array<{ databaseId: string; fields: Partial<TodoSnapshot> }>,
     label: string,
@@ -245,14 +251,6 @@ function originFields(origin: { app: string; id: string; label?: string } | null
     : { originApp: null, originId: null, originLabel: null };
 }
 
-function textMatches(todo: TodoItem, query: string) {
-  const haystack = [todo.subject, todo.description, todo.assignedTo, todo.origin?.label ?? ""].join("\n").toLowerCase();
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((term) => haystack.includes(term));
-}
 
 const TODO_FIELDS_SCHEMA = {
   subject: { type: "string", description: "Short title of the todo." },
@@ -358,11 +356,13 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
   const list: MindooDBAppAgentTool = {
     name: "list",
     description:
-      `Lists todos with todoId, subject, quadrant (with important/urgent), notes, assignee, start/due dates, ` +
-      `overdue and origin. ${QUADRANT_HELP} By default only open (not completed) todos of all databases; filter ` +
-      "by quadrant, importance, urgency, text, assignee, dates or origin. Sorted by quadrant, then due date. " +
-      "For \"what do I have to do this week\": forMe with dueWithin this_week (includes overdue), and also look at " +
-      "quadrant 1 todos without a due date, which are urgent by definition.",
+      `Finds todos: todoId, subject, quadrant (with important/urgent), notes, assignee, start/due dates, overdue ` +
+      `and origin. ${QUADRANT_HELP} By default only open (not completed) todos of all databases. Two kinds of ` +
+      "search: exact (status, quadrant, important/urgent, dates, origin, assignee, and exact words that must " +
+      "appear literally) and text, a topic search over the full-text index that also finds word beginnings and " +
+      "small typos and ranks by relevance (match any for a rough topic search). Without text, sorted by " +
+      "quadrant, then due date. For \"what do I have to do this week\": forMe with dueWithin this_week " +
+      "(includes overdue), and also look at quadrant 1 todos without a due date, which are urgent by definition.",
     inputSchema: {
       type: "object",
       properties: {
@@ -370,20 +370,29 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
         quadrants: { type: "array", items: { type: "integer", enum: [1, 2, 3, 4] } },
         important: { type: "boolean" },
         urgent: { type: "boolean" },
-        text: { type: "string", description: "Words that must all appear in subject, notes or assignee." },
+        text: {
+          type: "string",
+          description: "Topic search (full-text index over subject, notes, assignee; prefixes and typos match).",
+        },
+        match: {
+          type: "string",
+          enum: ["all", "any"],
+          description: "For text: all words must match (default) or any of them (rough topic search).",
+        },
+        exact: { type: "string", description: "Words that must appear literally in subject or notes." },
         assignee: { type: "string", description: "Part of the assignee's name." },
+        forMe: {
+          type: "boolean",
+          description: "Only todos assigned to the signed-in user or to nobody (assignee is free text).",
+        },
         dueBefore: { type: "string", description: "YYYY-MM-DD, inclusive." },
         dueAfter: { type: "string", description: "YYYY-MM-DD, inclusive." },
-        overdue: { type: "boolean", description: "Only open todos whose due date has passed." },
         dueWithin: {
           type: "string",
           enum: ["today", "this_week", "next_week"],
           description: "Due today / by Sunday of this week / during next week (Mon–Sun). today and this_week include overdue todos.",
         },
-        forMe: {
-          type: "boolean",
-          description: "Only todos assigned to the signed-in user or to nobody (assignee is free text).",
-        },
+        overdue: { type: "boolean", description: "Only open todos whose due date has passed." },
         origin: {
           type: "object",
           description: "Only todos from this origin: { app } or { app, id }.",
@@ -395,25 +404,29 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
     },
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     async execute(input) {
-      const status = optionalString(input, "status") ?? "open";
+      const status = (optionalString(input, "status") ?? "open") as "open" | "completed" | "all";
       if (!["open", "completed", "all"].includes(status)) invalid("status must be open, completed or all.");
-      const quadrants = Array.isArray(input.quadrants) ? (input.quadrants as unknown[]) : undefined;
-      if (quadrants && !quadrants.every((entry) => entry === 1 || entry === 2 || entry === 3 || entry === 4)) {
+      const quadrantsInput = Array.isArray(input.quadrants) ? (input.quadrants as unknown[]) : undefined;
+      if (quadrantsInput && !quadrantsInput.every((entry) => entry === 1 || entry === 2 || entry === 3 || entry === 4)) {
         invalid("quadrants must contain 1, 2, 3 or 4.");
       }
       const important = optionalBoolean(input, "important");
       const urgent = optionalBoolean(input, "urgent");
+      const quadrants = ([1, 2, 3, 4] as TodoQuadrant[])
+        .filter((quadrant) => !quadrantsInput || quadrantsInput.includes(quadrant))
+        .filter((quadrant) => important === undefined || quadrantTraits(quadrant).important === important)
+        .filter((quadrant) => urgent === undefined || quadrantTraits(quadrant).urgent === urgent);
       const text = optionalString(input, "text");
+      const match = optionalString(input, "match") as "all" | "any" | undefined;
+      if (match && !["all", "any"].includes(match)) invalid("match must be all or any.");
+      const exact = optionalString(input, "exact");
       const assignee = optionalString(input, "assignee")?.toLowerCase();
-      const dueBefore = optionalDate(input, "dueBefore")?.slice(0, 10);
-      const dueAfter = optionalDate(input, "dueAfter")?.slice(0, 10);
+      const forMe = optionalBoolean(input, "forMe");
       const overdue = optionalBoolean(input, "overdue");
       const dueWithin = optionalString(input, "dueWithin");
       if (dueWithin && !["today", "this_week", "next_week"].includes(dueWithin)) {
         invalid("dueWithin must be today, this_week or next_week.");
       }
-      const forMe = optionalBoolean(input, "forMe");
-      const userName = deps.userName();
       const origin = input.origin as { app?: unknown; id?: unknown } | undefined;
       const originApp = typeof origin?.app === "string" ? origin.app.trim().toLowerCase() : undefined;
       const originId = typeof origin?.id === "string" ? origin.id.trim() : undefined;
@@ -422,43 +435,65 @@ export function createTodoAgentTools(deps: TodoAgentDeps): MindooDBAppAgentTool[
         typeof limitValue === "number" && Number.isInteger(limitValue) ? Math.min(Math.max(limitValue, 1), MAX_LIST) : 100;
       const now = today();
       const week = weekOf(now);
-      const within =
-        dueWithin === "today"
-          ? { from: undefined, to: now }
-          : dueWithin === "this_week"
-            ? { from: undefined, to: week.end }
-            : dueWithin === "next_week"
-              ? { from: addDays(week.end, 1), to: addDays(week.end, 7) }
-              : null;
 
-      const matching = (await loadAll(optionalString(input, "databaseId")))
-        .filter((todo) => (status === "open" ? !todo.completed : status === "completed" ? todo.completed : true))
-        .filter((todo) => !quadrants || quadrants.includes(todo.quadrant))
-        .filter((todo) => important === undefined || quadrantTraits(todo.quadrant).important === important)
-        .filter((todo) => urgent === undefined || quadrantTraits(todo.quadrant).urgent === urgent)
-        .filter((todo) => !text || textMatches(todo, text))
-        .filter((todo) => !assignee || todo.assignedTo.toLowerCase().includes(assignee))
-        .filter((todo) => !dueBefore || (day(todo.dueAt) !== undefined && day(todo.dueAt)! <= dueBefore))
-        .filter((todo) => !dueAfter || (day(todo.dueAt) !== undefined && day(todo.dueAt)! >= dueAfter))
-        .filter((todo) => !overdue || (!todo.completed && day(todo.dueAt) !== undefined && day(todo.dueAt)! < now))
-        .filter((todo) => {
-          if (!within) return true;
-          const due = day(todo.dueAt);
-          return due !== undefined && (!within.from || due >= within.from) && due <= within.to;
-        })
-        .filter((todo) => !forMe || isForUser(todo.assignedTo, userName))
-        .filter((todo) => !originApp || todo.origin?.app === originApp)
-        .filter((todo) => !originId || todo.origin?.id === originId)
-        .sort(
-          (left, right) =>
-            left.quadrant - right.quadrant ||
-            (day(left.dueAt) ?? "9999").localeCompare(day(right.dueAt) ?? "9999") ||
-            left.subject.localeCompare(right.subject),
+      // All date conditions narrow one due-date window.
+      const upper: string[] = [];
+      const lower: string[] = [];
+      const dueBefore = optionalDate(input, "dueBefore")?.slice(0, 10);
+      const dueAfter = optionalDate(input, "dueAfter")?.slice(0, 10);
+      if (dueBefore) upper.push(dueBefore);
+      if (dueAfter) lower.push(dueAfter);
+      if (dueWithin === "today") upper.push(now);
+      if (dueWithin === "this_week") upper.push(week.end);
+      if (dueWithin === "next_week") {
+        lower.push(addDays(week.end, 1));
+        upper.push(addDays(week.end, 7));
+      }
+      if (overdue) upper.push(addDays(now, -1));
+      const criteria: TodoSearchCriteria = {
+        status: overdue ? "open" : status,
+        ...(quadrants.length < 4 ? { quadrants } : {}),
+        ...(lower.length ? { dueFrom: lower.sort().at(-1) } : {}),
+        ...(upper.length ? { dueTo: upper.sort()[0] } : {}),
+        ...(originApp ? { originApp } : {}),
+        ...(originId ? { originId } : {}),
+        ...(exact ? { exact } : {}),
+        ...(text ? { text, match: match ?? "all" } : {}),
+      };
+      if (!quadrants.length) {
+        return { total: 0, todos: [] };
+      }
+
+      const userName = deps.userName();
+      const results = await Promise.all(
+        readableDatabases(optionalString(input, "databaseId")).map((info) => deps.searchTodos(info.id, criteria)),
+      );
+      const modes = new Set(results.map((result) => result.mode));
+      const matching = results
+        .flatMap((result) => result.todos)
+        .filter(({ todo }) => !assignee || todo.assignedTo.toLowerCase().includes(assignee))
+        .filter(({ todo }) => !forMe || isForUser(todo.assignedTo, userName))
+        .sort((left, right) =>
+          text && left.score !== undefined && right.score !== undefined
+            ? right.score - left.score
+            : left.todo.quadrant - right.todo.quadrant ||
+              (day(left.todo.dueAt) ?? "9999").localeCompare(day(right.todo.dueAt) ?? "9999") ||
+              left.todo.subject.localeCompare(right.todo.subject),
         );
       return {
         total: matching.length,
         ...(matching.length > limit ? { truncated: true } : {}),
-        todos: matching.slice(0, limit).map((todo) => toAgentTodo(todo, now)),
+        ...(text
+          ? {
+              textSearch: modes.has("substring")
+                ? "substring (no full-text index here: only whole words in subject, notes and assignee match)"
+                : "full-text index",
+            }
+          : {}),
+        todos: matching.slice(0, limit).map(({ todo, score }) => ({
+          ...toAgentTodo(todo, now),
+          ...(score !== undefined ? { score } : {}),
+        })),
       };
     },
   };

@@ -6,7 +6,12 @@
  * happens. Whether agents can actually call the tools is Haven's decision
  * (global switch plus the per-app permission).
  */
-import { abbreviateCanonicalName, type MindooDBAppDatabaseInfo, type MindooDBAppSession } from "mindoodb-app-sdk";
+import {
+  abbreviateCanonicalName,
+  type MindooDBAppDatabase,
+  type MindooDBAppDatabaseInfo,
+  type MindooDBAppSession,
+} from "mindoodb-app-sdk";
 import { computed, watch, type ComputedRef, type Ref } from "vue";
 
 import {
@@ -15,6 +20,7 @@ import {
   type TodoAgentContext,
   type TodoAgentDeps,
 } from "@/features/agent/todoAgentTools";
+import { searchTodos } from "@/features/agent/todoSearch";
 import type { TodoFilterMode, TodoItem, TodoQuadrant } from "@/features/todos/composables/todoTypes";
 import type { useTodos } from "@/features/todos/composables/useTodos";
 
@@ -28,6 +34,7 @@ export function useTodoAgentTools(options: {
   isTimeTravelActive: ComputedRef<boolean>;
   /** Canonical name of the signed-in user (CN=…/O=…). */
   userName: ComputedRef<string>;
+  getDatabase: (databaseId: string) => Promise<MindooDBAppDatabase | null>;
   todos: ReturnType<typeof useTodos>;
 }) {
   const { todos } = options;
@@ -75,6 +82,16 @@ export function useTodoAgentTools(options: {
         : (options.databases.value.find((info) => info.capabilities.includes("create"))?.id ?? null),
     readOnly: () => options.isTimeTravelActive.value,
     loadTodos: async (databaseId): Promise<TodoItem[]> => await todos.listDatabaseTodos(databaseId),
+    searchTodos: async (databaseId, criteria) => {
+      const database = await options.getDatabase(databaseId);
+      if (!database) {
+        return { todos: [], mode: "none" };
+      }
+      const info = options.databases.value.find((entry) => entry.id === databaseId);
+      return await searchTodos(database, databaseId, criteria, {
+        mayEnableFulltext: Boolean(info?.capabilities.includes("update")) && !options.isTimeTravelActive.value,
+      });
+    },
     createTodos: async (inputs, label) => await todos.createTodos(inputs, label, true),
     editTodos: async (edits, label) => await todos.editTodos(edits, label, true),
     removeTodos: async (list, label) => await todos.removeTodos(list, label, true),
