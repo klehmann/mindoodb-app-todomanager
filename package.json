@@ -23,7 +23,7 @@
   "dependencies": {
     "@primeuix/styled": "^0.7.4",
     "@primeuix/themes": "^2.0.3",
-    "mindoodb-app-sdk": "^0.0.55",
+    "mindoodb-app-sdk": "^0.0.56",
     "mindoodb-view-language": "^0.0.14",
     "primeicons": "^7.0.0",
     "primevue": "^4.5.4",
