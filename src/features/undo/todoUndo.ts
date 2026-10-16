@@ -10,6 +10,7 @@ import type { MindooDBAppDatabase } from "mindoodb-app-sdk";
 import { computed, ref } from "vue";
 
 import type { TodoSnapshot } from "@/features/todos/composables/todoTypes";
+import { toStoredTodoFields } from "@/features/todos/composables/todoStoredValues";
 
 export type TodoChange = {
   databaseId: string;
@@ -80,7 +81,7 @@ export function createTodoUndo(options: {
       await database.documents.undelete(change.todoId);
     }
     await database.documents.update(change.todoId, {
-      set: { ...target, updatedAt: new Date().toISOString() },
+      set: toStoredTodoFields({ ...target, updatedAt: new Date().toISOString() }),
     });
   }
 

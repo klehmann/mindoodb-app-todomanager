@@ -17,6 +17,7 @@ import {
 } from "mindoodb-app-sdk";
 
 import { createTodoUndo, type TodoChange } from "@/features/undo/todoUndo";
+import { toStoredTodoFields } from "@/features/todos/composables/todoStoredValues";
 
 import {
   buildTodoSelectionKey,
@@ -1053,7 +1054,9 @@ export function useTodos(options: UseTodosOptions) {
         ),
       );
       const now = new Date().toISOString();
-      const created = await database.documents.create({ set: { ...stored, createdAt: now, updatedAt: now } });
+      const created = await database.documents.create({
+        set: toStoredTodoFields({ ...stored, createdAt: now, updatedAt: now }),
+      });
       changes.push({
         databaseId: input.databaseId,
         todoId: created.id,
@@ -1087,7 +1090,7 @@ export function useTodos(options: UseTodosOptions) {
       if (!edit.todo.createdAt) {
         set.createdAt = set.updatedAt;
       }
-      await database.documents.update(edit.todo.id, { set });
+      await database.documents.update(edit.todo.id, { set: toStoredTodoFields(set) });
       const before = snapshotTodo(edit.todo);
       const after = { ...before, ...edit.set };
       changes.push({
