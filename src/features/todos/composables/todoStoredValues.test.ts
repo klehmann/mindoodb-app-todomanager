@@ -111,4 +111,57 @@ describe("stored todos", () => {
 
     unmount();
   });
+
+  it("reads and edits todos stored as text before the switch", async () => {
+    const controller = createMockMindooDBAppSession({
+      databases: [{
+        info: { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete", "history"] },
+        automerge: true,
+        documents: [],
+      }],
+    });
+    const database: MindooDBAppDatabase = await controller.session.openDatabase("main");
+    // Written the old way: every string plain, so stored as collaborative text.
+    const legacy = await database.documents.create({
+      set: {
+        subject: "Old todo",
+        description: "",
+        assignedTo: "Ada Lovelace",
+        assignedToId: "CN=Ada Lovelace/O=Acme",
+        quadrant: 2,
+        dueAt: "2026-10-20",
+        startAt: null,
+        completed: false,
+        createdAt: "2026-10-01T00:00:00.000Z",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+      },
+    });
+    const { result, unmount } = withSetup(() => useTodos({
+      selectedDatabaseIds: ref(["main"]),
+      databases: ref([
+        { id: "main", title: "Main", capabilities: ["read", "create", "update", "delete"] },
+      ] as any),
+      preferredDatabaseId: computed(() => "main"),
+      getDatabase: vi.fn(async () => database),
+      loading: ref(false),
+      busyAction: ref<string | null>(null),
+      error: ref<string | null>(null),
+      setSuccess: vi.fn(),
+    }));
+    await result.refreshTodos();
+    const todo = result.todos.value.find((entry) => entry.id === legacy.id)!;
+    expect(todo).toMatchObject({ subject: "Old todo", assignedToId: "CN=Ada Lovelace/O=Acme", dueAt: "2026-10-20" });
+
+    await result.editTodos([{ todo, set: { dueAt: "2026-10-22", assignedToId: "CN=Paul Meyer/O=Acme" } }], "Edit");
+    let stored = await database.documents.get(legacy.id);
+    expect(stored?.data).toMatchObject({ dueAt: "2026-10-22", assignedToId: "CN=Paul Meyer/O=Acme", subject: "Old todo" });
+    const snapshot = await database.documents.getAutomergeSnapshot(legacy.id);
+    expect(textPaths(snapshot.binary)).not.toContain("dueAt");
+
+    await result.undoLastChange();
+    stored = await database.documents.get(legacy.id);
+    expect(stored?.data).toMatchObject({ dueAt: "2026-10-20", assignedToId: "CN=Ada Lovelace/O=Acme" });
+
+    unmount();
+  });
 });
