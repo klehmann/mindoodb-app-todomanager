@@ -1,4 +1,4 @@
-import { MindooDBAppAgentToolError, type MindooDBAppDatabaseInfo } from "mindoodb-app-sdk";
+import { MindooDBAppAgentToolError, MindooDBAppValue, type MindooDBAppDatabaseInfo } from "mindoodb-app-sdk";
 import { computed, ref } from "vue";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,6 +8,13 @@ import { createTodoAgentTools, type TodoAgentDeps } from "@/features/agent/todoA
 import { searchTodos } from "@/features/agent/todoSearch";
 import { useTodos } from "@/features/todos/composables/useTodos";
 import { withSetup } from "@/test-utils/withSetup";
+
+/** Fields as the host returns them on read: atomic strings as plain strings. */
+function readBack(set: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(set).map(([key, value]) => [key, MindooDBAppValue.isTyped(value) ? value.value : value]),
+  );
+}
 
 /** In-memory todo database with the document calls the app uses. */
 function createMemoryDatabase(seed: Array<{ id: string; data: Record<string, unknown> }> = []) {
@@ -57,12 +64,12 @@ function createMemoryDatabase(seed: Array<{ id: string; data: Record<string, unk
       create: vi.fn(async ({ set }: { set: Record<string, unknown> }) => {
         counter += 1;
         const id = `new-${counter}`;
-        docs.set(id, { data: { ...set }, deleted: false });
-        return { id, data: { ...set } };
+        docs.set(id, { data: readBack(set), deleted: false });
+        return { id, data: readBack(set) };
       }),
       update: vi.fn(async (id: string, { set }: { set: Record<string, unknown> }) => {
         const doc = docs.get(id)!;
-        doc.data = { ...doc.data, ...set };
+        doc.data = { ...doc.data, ...readBack(set) };
         return { ok: true };
       }),
       delete: vi.fn(async (id: string) => {
