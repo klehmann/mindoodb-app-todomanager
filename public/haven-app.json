@@ -6,7 +6,7 @@
   "description": "Visual task workflow using Covey's four-quadrant method with drag and drop.",
   "version": "1.0.0",
   "runtime": "iframe",
-  "hosting": "external",
+  "hosting": "hosted",
   "defaultLaunchDatabaseId": "todomanager",
   "agentToolPrefix": "todo",
   "databases": [
