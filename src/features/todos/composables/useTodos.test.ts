@@ -227,6 +227,11 @@ describe("useTodos", () => {
         clientY: 10,
       }) as PointerEvent,
     );
+    // No text selection while a todo is pressed or dragged (WebKit selects quadrant titles otherwise).
+    expect(document.documentElement.classList.contains("todo-dragging")).toBe(true);
+    const selectStart = new Event("selectstart", { cancelable: true });
+    document.dispatchEvent(selectStart);
+    expect(selectStart.defaultPrevented).toBe(true);
 
     document.dispatchEvent(new PointerCtor("pointermove", {
       clientX: 30,
@@ -236,6 +241,10 @@ describe("useTodos", () => {
       clientX: 30,
       clientY: 30,
     }));
+    expect(document.documentElement.classList.contains("todo-dragging")).toBe(false);
+    const laterSelectStart = new Event("selectstart", { cancelable: true });
+    document.dispatchEvent(laterSelectStart);
+    expect(laterSelectStart.defaultPrevented).toBe(false);
 
     await vi.waitFor(() => {
       expect(mainDatabase.documents.update).toHaveBeenCalledWith("todo-1", expect.objectContaining({

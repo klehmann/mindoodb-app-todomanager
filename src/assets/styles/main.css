@@ -260,3 +260,10 @@ a {
 html {
   overscroll-behavior: none !important;
 }
+
+/* Set by useTodos while a todo is pressed or dragged, so titles and counters don't get selected. */
+html.todo-dragging,
+html.todo-dragging * {
+  -webkit-user-select: none;
+  user-select: none;
+}

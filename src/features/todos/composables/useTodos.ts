@@ -324,10 +324,32 @@ export function useTodos(options: UseTodosOptions) {
       : null;
   }
 
+  // Todo cards are user-select: none, but WebKit (Safari, Haven desktop) still
+  // starts a text selection on mousedown and extends it into the quadrant titles
+  // and counters while the todo is dragged. Mouse drags are not preventDefault()ed,
+  // so the whole document is unselectable from pointerdown until pointerup.
+  function clearTextSelection() {
+    const selection = document.getSelection();
+    if (selection && !selection.isCollapsed) {
+      selection.removeAllRanges();
+    }
+  }
+
+  function setTextSelectionSuppressed(suppressed: boolean) {
+    document.documentElement.classList.toggle("todo-dragging", suppressed);
+  }
+
+  function handleDocumentSelectStart(event: Event) {
+    if (todoPointerDragState.todoId) {
+      event.preventDefault();
+    }
+  }
+
   function resetTodoPointerDrag() {
     if (todoPointerDragState.active) {
       endDrag();
     }
+    setTextSelectionSuppressed(false);
     todoPointerDragState.todoId = "";
     todoPointerDragState.active = false;
     todoPointerDragState.started = false;
@@ -347,6 +369,7 @@ export function useTodos(options: UseTodosOptions) {
     }
     todoPointerDragState.active = true;
     todoPointerDragState.started = true;
+    clearTextSelection();
     todoPointerDragState.x = clientX;
     todoPointerDragState.y = clientY;
     beginDrag(todoPointerDragState.todoId);
@@ -373,6 +396,7 @@ export function useTodos(options: UseTodosOptions) {
     todoPointerDragState.y = event.clientY;
     todoPointerDragState.hoverQuadrant = null;
     todoPointerDragState.hoverRecycle = false;
+    setTextSelectionSuppressed(true);
   }
 
   function handleTodoPointerMove(event: PointerEvent) {
@@ -404,6 +428,7 @@ export function useTodos(options: UseTodosOptions) {
       if (event.pointerType === "touch" && event.cancelable) {
         event.preventDefault();
       }
+      clearTextSelection();
       updateTodoDropTarget(event.clientX, event.clientY);
     }
   }
@@ -1375,12 +1400,15 @@ export function useTodos(options: UseTodosOptions) {
     document.addEventListener("pointermove", handleTodoPointerMove);
     document.addEventListener("pointerup", handleTodoPointerUp);
     document.addEventListener("pointercancel", handleTodoPointerCancel);
+    document.addEventListener("selectstart", handleDocumentSelectStart);
   });
 
   onBeforeUnmount(() => {
     document.removeEventListener("pointermove", handleTodoPointerMove);
     document.removeEventListener("pointerup", handleTodoPointerUp);
     document.removeEventListener("pointercancel", handleTodoPointerCancel);
+    document.removeEventListener("selectstart", handleDocumentSelectStart);
+    setTextSelectionSuppressed(false);
     if (searchDebounceHandle !== null) {
       clearTimeout(searchDebounceHandle);
       searchDebounceHandle = null;
