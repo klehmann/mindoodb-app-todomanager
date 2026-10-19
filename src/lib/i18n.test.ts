@@ -212,4 +212,10 @@ describe("haven-app.json", () => {
       for (const locale of LOCALES) expect(String(map[locale]).trim(), `${path}.${locale}`).not.toBe("");
     }
   });
+
+  it("French puts a non-breaking space before : ; ? ! and inside « »", () => {
+    for (const [path, map] of localizedMaps(definition, "")) {
+      expect(String(map.fr ?? ""), `${path}.fr`).not.toMatch(/ [:;?!»]|« /);
+    }
+  });
 });

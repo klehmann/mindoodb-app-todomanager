@@ -94,7 +94,7 @@
       "en": "A todo list organised by Covey's four quadrants: every todo is important or not and urgent or not. Todos have notes, an assignee, start and due dates and can point back to where they came from, such as a mind map node.",
       "de": "Eine Aufgabenliste nach Coveys vier Quadranten: Jede Aufgabe ist wichtig oder nicht und dringend oder nicht. Aufgaben haben Notizen, eine zuständige Person, Start- und Fälligkeitsdatum und können auf ihre Herkunft verweisen, etwa einen Mindmap-Knoten.",
       "es": "Una lista de tareas organizada según los cuatro cuadrantes de Covey: cada tarea es importante o no y urgente o no. Las tareas tienen notas, un responsable, fechas de inicio y de vencimiento, y pueden remitir a su origen, por ejemplo un nodo de un mapa mental.",
-      "fr": "Une liste de tâches organisée selon les quatre quadrants de Covey : chaque tâche est importante ou non, urgente ou non. Les tâches ont des notes, un responsable, des dates de début et d’échéance, et peuvent renvoyer à leur origine, par exemple un nœud de carte mentale.",
+      "fr": "Une liste de tâches organisée selon les quatre quadrants de Covey : chaque tâche est importante ou non, urgente ou non. Les tâches ont des notes, un responsable, des dates de début et d’échéance, et peuvent renvoyer à leur origine, par exemple un nœud de carte mentale.",
       "it": "Un elenco di attività organizzato secondo i quattro quadranti di Covey: ogni attività è importante o no e urgente o no. Le attività hanno note, un responsabile, date di inizio e di scadenza e possono rimandare alla loro origine, ad esempio un nodo di una mappa mentale.",
       "nb": "En gjøremålsliste ordnet etter Coveys fire kvadranter: hvert gjøremål er viktig eller ikke og haster eller ikke. Gjøremål har notater, en ansvarlig, start- og forfallsdato og kan vise tilbake til hvor de kom fra, for eksempel en node i et tankekart.",
       "nl": "Een takenlijst volgens Covey's vier kwadranten: elke taak is belangrijk of niet en urgent of niet. Taken hebben notities, een verantwoordelijke, een start- en vervaldatum en kunnen verwijzen naar hun herkomst, zoals een knooppunt in een mindmap.",
@@ -181,9 +181,9 @@
         "Crea una tarea por cada tarea abierta del mapa mental del lanzamiento"
       ],
       "fr": [
-        "Qu’est-ce que je dois faire cette semaine ?",
-        "Ajoute des tâches pour la déclaration d’impôts : rassembler les justificatifs d’ici vendredi, prendre rendez-vous avec le conseiller",
-        "Quelles tâches sont en retard, et lesquelles sont attribuées à Paul ?",
+        "Qu’est-ce que je dois faire cette semaine ?",
+        "Ajoute des tâches pour la déclaration d’impôts : rassembler les justificatifs d’ici vendredi, prendre rendez-vous avec le conseiller",
+        "Quelles tâches sont en retard, et lesquelles sont attribuées à Paul ?",
         "Sors le brouillon de la newsletter du quadrant urgent et donne-lui la fin du mois comme échéance",
         "Crée une tâche pour chaque tâche ouverte de la carte mentale du lancement"
       ],
