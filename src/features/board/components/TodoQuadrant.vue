@@ -6,6 +6,7 @@ import Tag from "primevue/tag";
 
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
 import type { TodoItem, TodoQuadrantDefinition } from "@/features/todos/composables/todoTypes";
+import { formatDate, quadrantLabels, t } from "@/lib/i18n";
 
 const TOUCH_CONTEXT_MENU_DELAY_MS = 700;
 const TOUCH_CONTEXT_MENU_MOVE_TOLERANCE = 10;
@@ -32,6 +33,7 @@ const localContextMenuRef = ref<{ show: (event: MouseEvent) => void; hide: () =>
 const contextMenuTodo = ref<TodoItem | null>(null);
 const fileDropTargetTodoKey = ref<string | null>(null);
 const fileDragDepth = new Map<string, number>();
+const labels = computed(() => quadrantLabels(props.definition.quadrant));
 const canUseHostedContextMenu = computed(() =>
   props.app.launchContext.value?.runtime === "iframe" && Boolean(props.app.session.value?.menus),
 );
@@ -45,25 +47,12 @@ type TodoContextMenuAction =
   | "delete"
   | "properties";
 
-function formatDate(value: string | null) {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  return parsed.toLocaleDateString();
-}
-
 function formatDateRange(startAt: string | null, dueAt: string | null) {
   const startLabel = formatDate(startAt);
   const dueLabel = formatDate(dueAt);
 
   if (startLabel && dueLabel) {
-    return `${startLabel} - ${dueLabel}`;
+    return t("dateRange", { start: startLabel, due: dueLabel });
   }
 
   return startLabel ?? dueLabel;
@@ -175,43 +164,43 @@ async function hideHostedContextMenu() {
 
 function buildHostedContextMenuItems(todo: TodoItem) {
   return [
-    { id: "move:1", label: "Move to Q1" },
-    { id: "move:2", label: "Move to Q2" },
-    { id: "move:3", label: "Move to Q3" },
-    { id: "move:4", label: "Move to Q4" },
+    { id: "move:1", label: t("moveTo", { number: 1 }) },
+    { id: "move:2", label: t("moveTo", { number: 2 }) },
+    { id: "move:3", label: t("moveTo", { number: 3 }) },
+    { id: "move:4", label: t("moveTo", { number: 4 }) },
     { separator: true },
     {
       id: "toggle-completed",
-      label: todo.completed ? "Mark as not completed" : "Mark as completed",
+      label: todo.completed ? t("markNotCompleted") : t("markCompleted"),
     },
     { separator: true },
-    { id: "delete", label: "Delete", destructive: true },
+    { id: "delete", label: t("delete"), destructive: true },
     { separator: true },
-    { id: "properties", label: "Properties" },
+    { id: "properties", label: t("properties") },
   ] as const;
 }
 
 const localContextMenuItems = computed<MenuItem[]>(() => [
   {
-    label: "Move to Q1",
+    label: t("moveTo", { number: 1 }),
     command: () => {
       void executeTodoContextMenuAction("move:1");
     },
   },
   {
-    label: "Move to Q2",
+    label: t("moveTo", { number: 2 }),
     command: () => {
       void executeTodoContextMenuAction("move:2");
     },
   },
   {
-    label: "Move to Q3",
+    label: t("moveTo", { number: 3 }),
     command: () => {
       void executeTodoContextMenuAction("move:3");
     },
   },
   {
-    label: "Move to Q4",
+    label: t("moveTo", { number: 4 }),
     command: () => {
       void executeTodoContextMenuAction("move:4");
     },
@@ -220,7 +209,7 @@ const localContextMenuItems = computed<MenuItem[]>(() => [
     separator: true,
   },
   {
-    label: contextMenuTodo.value?.completed ? "Mark as not completed" : "Mark as completed",
+    label: contextMenuTodo.value?.completed ? t("markNotCompleted") : t("markCompleted"),
     command: () => {
       void executeTodoContextMenuAction("toggle-completed");
     },
@@ -229,7 +218,7 @@ const localContextMenuItems = computed<MenuItem[]>(() => [
     separator: true,
   },
   {
-    label: "Delete",
+    label: t("delete"),
     command: () => {
       void executeTodoContextMenuAction("delete");
     },
@@ -238,7 +227,7 @@ const localContextMenuItems = computed<MenuItem[]>(() => [
     separator: true,
   },
   {
-    label: "Properties",
+    label: t("properties"),
     command: () => {
       void executeTodoContextMenuAction("properties");
     },
@@ -476,10 +465,10 @@ onBeforeUnmount(() => {
     <header class="quadrant__header">
       <div class="quadrant__titles">
         <p class="panel__eyebrow quadrant__titles-eyebrow">
-          {{ definition.subtitle }}
+          {{ labels.importance }}
         </p>
         <h2 class="quadrant__titles-heading">
-          {{ definition.title }}
+          {{ labels.urgency }}
         </h2>
       </div>
       <div class="quadrant__badge">
@@ -507,7 +496,7 @@ onBeforeUnmount(() => {
       >
         <div class="todo-card__body">
           <div class="todo-card__title-row">
-            <strong>{{ todo.subject || "Untitled todo" }}</strong>
+            <strong>{{ todo.subject || t("untitledTodo") }}</strong>
             <div class="todo-card__badges">
               <span
                 v-if="props.app.getTodoAttachmentCount(todo.selectionKey) > 0"
@@ -520,7 +509,7 @@ onBeforeUnmount(() => {
               <Tag
                 v-if="todo.completed"
                 severity="success"
-                value="Done"
+                :value="t('doneTag')"
               />
             </div>
           </div>

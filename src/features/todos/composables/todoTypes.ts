@@ -56,6 +56,7 @@ export type TodoQuadrantDefinition = {
   subtitle: string;
 };
 
+/** The four quadrants with their English names; the UI shows them via `quadrantLabels()` in the user's language. */
 export const TODO_QUADRANTS: TodoQuadrantDefinition[] = [
   { quadrant: 1, title: "Due Soon", subtitle: "Important" },
   { quadrant: 2, title: "Not Due Soon", subtitle: "Important" },

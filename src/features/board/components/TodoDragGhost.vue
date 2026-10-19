@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
+import { formatDate, t } from "@/lib/i18n";
 
 defineProps<{
   app: ReturnType<typeof useTodoManagerApp>;
@@ -16,7 +17,7 @@ defineProps<{
       <div class="todo-drag-ghost__top">
         <div class="todo-drag-ghost__content">
           <header class="todo-drag-ghost__header">
-            <strong>{{ app.dragPreviewTodo.value.subject || "Untitled todo" }}</strong>
+            <strong>{{ app.dragPreviewTodo.value.subject || t("untitledTodo") }}</strong>
           </header>
           <p
             v-if="app.dragPreviewTodo.value.description"
@@ -35,8 +36,8 @@ defineProps<{
 
       <div class="todo-drag-ghost__meta">
         <span v-if="app.dragPreviewTodo.value.assignedTo">{{ app.dragPreviewTodo.value.assignedTo }}</span>
-        <span v-if="app.dragPreviewTodo.value.dueAt">
-          Due {{ new Date(app.dragPreviewTodo.value.dueAt).toLocaleDateString() }}
+        <span v-if="formatDate(app.dragPreviewTodo.value.dueAt)">
+          {{ t("dueOn", { date: formatDate(app.dragPreviewTodo.value.dueAt)! }) }}
         </span>
       </div>
     </div>

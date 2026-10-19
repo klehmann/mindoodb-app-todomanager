@@ -108,7 +108,20 @@
           if (Date.now() - lastAttempt() < COOLDOWN_MS) {
             var root = document.getElementById("app");
             if (root && !root.firstChild) {
-              root.textContent = "Mindoo To Do Manager could not load its program files. Please close the app and open it again.";
+              // In the browser's language: nothing else has loaded. src/lib/i18n.test.ts checks every language is here.
+              var loadFailed = {
+                en: "Mindoo To Do Manager could not load its program files. Please close the app and open it again.",
+                de: "Mindoo To Do Manager konnte seine Programmdateien nicht laden. Schließe die App und öffne sie erneut.",
+                es: "Mindoo To Do Manager no pudo cargar sus archivos de programa. Cierra la app y vuelve a abrirla.",
+                fr: "Mindoo To Do Manager n'a pas pu charger ses fichiers de programme. Fermez l'app et rouvrez-la.",
+                it: "Mindoo To Do Manager non è riuscito a caricare i suoi file di programma. Chiudi l'app e riaprila.",
+                nb: "Mindoo To Do Manager kunne ikke laste inn programfilene sine. Lukk appen og åpne den igjen.",
+                nl: "Mindoo To Do Manager kon zijn programmabestanden niet laden. Sluit de app en open hem opnieuw.",
+                pl: "Mindoo To Do Manager nie mógł wczytać swoich plików programu. Zamknij aplikację i otwórz ją ponownie."
+              };
+              var primary = String(navigator.language || "").toLowerCase().split(/[-_]/)[0];
+              if (primary === "no" || primary === "nn") primary = "nb";
+              root.textContent = loadFailed[primary] || loadFailed.en;
             }
             return;
           }

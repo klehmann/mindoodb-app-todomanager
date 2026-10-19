@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 
 import type { TodoItem } from "@/features/todos/composables/todoTypes";
+import { formatDate, setLocale } from "@/lib/i18n";
 
 import TodoQuadrant from "./TodoQuadrant.vue";
 
@@ -147,6 +148,34 @@ describe("TodoQuadrant", () => {
     expect(contextMenuShow).not.toHaveBeenCalled();
   });
 
+  it("labels the menu and the quadrant in Haven's language", async () => {
+    setLocale("nb-NO");
+    try {
+      const show = vi.fn().mockResolvedValue({ action: "dismissed", reason: "outside_click" });
+      const app = createAppStub();
+      app.launchContext = ref({ runtime: "iframe" });
+      app.session = ref({ menus: { show, hide: vi.fn().mockResolvedValue(undefined) } });
+      const wrapper = mount(TodoQuadrant, {
+        props: { app, definition: { quadrant: 3, title: "Due Soon", subtitle: "Not Important" }, todos: [todo] },
+        global: { stubs: { ContextMenu: ContextMenuStub } },
+      });
+
+      expect(wrapper.find(".quadrant__titles").text()).toContain("Ikke viktig");
+      expect(wrapper.find(".quadrant__titles").text()).toContain("Forfaller snart");
+      await wrapper.find(".todo-card").trigger("contextmenu", { clientX: 30, clientY: 60 });
+      expect(show).toHaveBeenCalledWith(expect.objectContaining({
+        items: expect.arrayContaining([
+          expect.objectContaining({ id: "move:1", label: "Flytt til kvadrant 1" }),
+          expect.objectContaining({ id: "toggle-completed", label: "Merk som fullført" }),
+          expect.objectContaining({ id: "delete", label: "Slett" }),
+          expect.objectContaining({ id: "properties", label: "Egenskaper" }),
+        ]),
+      }));
+    } finally {
+      setLocale("en");
+    }
+  });
+
   it("dismisses hosted menus when the page background is clicked", async () => {
     const show = vi.fn().mockResolvedValue({ action: "dismissed", reason: "outside_click" });
     const hide = vi.fn().mockResolvedValue(undefined);
@@ -289,7 +318,7 @@ describe("TodoQuadrant", () => {
 
     expect(wrapper.find(".todo-card__assigned").text()).toContain("Alex Example");
     expect(wrapper.find(".todo-card__date-range").text()).toContain(
-      `${new Date(todo.startAt!).toLocaleDateString()} - ${new Date(todo.dueAt!).toLocaleDateString()}`,
+      `${formatDate(todo.startAt)} – ${formatDate(todo.dueAt)}`,
     );
   });
 

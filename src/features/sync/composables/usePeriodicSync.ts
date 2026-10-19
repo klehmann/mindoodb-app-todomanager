@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, ref, watch, type Ref } from "vue";
 
 import type { TodoSyncMode, TodoSyncState } from "@/features/todos/composables/todoTypes";
+import { t } from "@/lib/i18n";
 
 function readErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -56,7 +57,7 @@ export function usePeriodicSync(options: UsePeriodicSyncOptions) {
       })
       .catch((error: unknown) => {
         syncState.value = "error";
-        syncError.value = readErrorMessage(error, "Sync failed.");
+        syncError.value = readErrorMessage(error, t("syncFailed"));
         return false;
       })
       .finally(() => {

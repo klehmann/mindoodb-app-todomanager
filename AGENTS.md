@@ -20,10 +20,11 @@ change that adds it: labels, buttons, placeholders, empty states, errors,
   form of address: German *du*, Spanish *tú*, French *vous*, Italian *tu*,
   Norwegian *du*, Dutch *je*, Polish informal.
 
-**In this repo:** the store listing texts in `public/haven-app.json` are in all eight
-languages.
-
-**Known gap:** the app UI (`src/App.vue`, `src/features/**`) is English only —
-hard-coded strings, no `vue-i18n`. When you add or change UI here, add `vue-i18n` with
-`src/i18n/locales/<lang>.json` and a key-parity test (as in mindoodb-app-starter)
-instead of adding more English literals.
+**In this repo:** the UI strings live in `src/lib/i18n.ts` (typed tables,
+`satisfies Record<Locale, Messages>`, `t()` / `tn()` with `Intl.PluralRules`, dates and
+file sizes via `Intl`), following Haven's locale (`launchContext.locale`,
+`onLocaleChange`). The startup recovery screen has its own dependency-free table in
+`src/lib/bootMessages.ts`, and `index.html` an inline fallback map. `src/lib/i18n.test.ts`
+checks keys, `{placeholders}`, plural forms, French spacing, the `index.html` map and the
+store listing texts in `public/haven-app.json`. Agent tool descriptions, results and undo
+step labels (read by agents through `todo_history`) stay English.

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, watch, watchEffect } from "vue";
+import { usePrimeVue } from "primevue/config";
 import Message from "primevue/message";
 import ProgressSpinner from "primevue/progressspinner";
 import Toast from "primevue/toast";
@@ -13,10 +14,24 @@ import TodoBoard from "@/features/board/components/TodoBoard.vue";
 import TodoMobileBoard from "@/features/board/components/TodoMobileBoard.vue";
 import TodoDialog from "@/features/todos/components/TodoDialog.vue";
 import { useTodoManagerAppUpdate } from "@/pwa/appUpdate";
+import { primeVueLocale, t, tSplit } from "@/lib/i18n";
 
 const app = useTodoManagerApp();
 const appUpdate = useTodoManagerAppUpdate();
 const toast = useToast();
+
+// PrimeVue's built-in texts (dialog close button, menu bar, tab scrolling) follow Haven's locale too.
+const primevue = usePrimeVue();
+watchEffect(() => {
+  const texts = primeVueLocale();
+  const locale = primevue.config.locale!;
+  Object.assign(locale, { aria: { ...locale.aria, ...texts.aria } });
+});
+
+/** The footer motto around its emphasized word, in the order the language puts them. */
+const footerMotto = computed(() => {
+  return { ...tSplit("footerMotto", "ugliest"), emphasis: t("footerUgliest") };
+});
 
 watch(
   () => app.error.value,
@@ -110,14 +125,14 @@ async function handleFooterRecycleDrop(event: DragEvent) {
       class="app-shell__update-banner"
       @close="appUpdate.dismissUpdate"
     >
-      <span>A new version of To Do Manager is available.</span>
+      <span>{{ t("updateAvailable") }}</span>
       <button
         type="button"
         class="app-shell__reload-button"
         :disabled="appUpdate.updateReloading.value"
         @click="appUpdate.reloadForUpdate"
       >
-        {{ appUpdate.updateReloading.value ? "Reloading..." : "Reload now" }}
+        {{ appUpdate.updateReloading.value ? t("reloading") : t("reloadNow") }}
       </button>
     </Message>
 
@@ -127,7 +142,7 @@ async function handleFooterRecycleDrop(event: DragEvent) {
         class="status-view"
       >
         <ProgressSpinner stroke-width="4" />
-        <p>Loading todos...</p>
+        <p>{{ t("loadingTodos") }}</p>
       </div>
 
       <div
@@ -135,8 +150,7 @@ async function handleFooterRecycleDrop(event: DragEvent) {
         class="status-view"
       >
         <Message severity="info">
-          No database mapping is configured for this application yet. Please create a database mapping for the
-          application in Haven.
+          {{ t("noDatabase") }}
         </Message>
       </div>
 
@@ -162,15 +176,15 @@ async function handleFooterRecycleDrop(event: DragEvent) {
     >
       <div class="footer-bar__main">
         <span class="footer-bar__text">
-          Work from 1 to 4. Do the <em>ugliest</em> thing first. :-)
+          {{ footerMotto.before }}<em>{{ footerMotto.emphasis }}</em>{{ footerMotto.after }}
         </span>
       </div>
       <div
         class="footer-bar__recycle"
         :class="{ 'footer-bar__recycle--drag-hover': app.todoPointerDragState.hoverRecycle && app.todoPointerDragState.active }"
         data-todo-drop-target="recycle"
-        aria-label="Recycle bin — drop todos here to delete them"
-        title="Drop todos here to delete them"
+        :aria-label="t('recycleLabel')"
+        :title="t('recycleTitle')"
         @dragover.prevent
         @drop="handleFooterRecycleDrop"
       >
