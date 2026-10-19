@@ -22,3 +22,9 @@
   Access-Control-Allow-Origin: *
   # Pinned by hash in the manifest, so a stale copy can never pass as current.
   Cache-Control: public, max-age=300
+
+# The agent guide named in haven-app.json (`agent.guide`). Haven fetches it when an
+# agent calls haven_apps_describe, from its own origin.
+/agent/*
+  Access-Control-Allow-Origin: *
+  Cache-Control: no-cache

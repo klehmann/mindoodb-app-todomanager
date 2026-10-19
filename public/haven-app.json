@@ -88,5 +88,147 @@
     "publisher": {
       "name": "Mindoo GmbH"
     }
+  },
+  "agent": {
+    "summary": {
+      "en": "A todo list organised by Covey's four quadrants: every todo is important or not and urgent or not. Todos have notes, an assignee, start and due dates and can point back to where they came from, such as a mind map node.",
+      "de": "Eine Aufgabenliste nach Coveys vier Quadranten: Jede Aufgabe ist wichtig oder nicht und dringend oder nicht. Aufgaben haben Notizen, eine zuständige Person, Start- und Fälligkeitsdatum und können auf ihre Herkunft verweisen, etwa einen Mindmap-Knoten.",
+      "es": "Una lista de tareas organizada según los cuatro cuadrantes de Covey: cada tarea es importante o no y urgente o no. Las tareas tienen notas, un responsable, fechas de inicio y de vencimiento, y pueden remitir a su origen, por ejemplo un nodo de un mapa mental.",
+      "fr": "Une liste de tâches organisée selon les quatre quadrants de Covey : chaque tâche est importante ou non, urgente ou non. Les tâches ont des notes, un responsable, des dates de début et d’échéance, et peuvent renvoyer à leur origine, par exemple un nœud de carte mentale.",
+      "it": "Un elenco di attività organizzato secondo i quattro quadranti di Covey: ogni attività è importante o no e urgente o no. Le attività hanno note, un responsabile, date di inizio e di scadenza e possono rimandare alla loro origine, ad esempio un nodo di una mappa mentale.",
+      "nb": "En gjøremålsliste ordnet etter Coveys fire kvadranter: hvert gjøremål er viktig eller ikke og haster eller ikke. Gjøremål har notater, en ansvarlig, start- og forfallsdato og kan vise tilbake til hvor de kom fra, for eksempel en node i et tankekart.",
+      "nl": "Een takenlijst volgens Covey's vier kwadranten: elke taak is belangrijk of niet en urgent of niet. Taken hebben notities, een verantwoordelijke, een start- en vervaldatum en kunnen verwijzen naar hun herkomst, zoals een knooppunt in een mindmap.",
+      "pl": "Lista zadań uporządkowana według czterech ćwiartek Coveya: każde zadanie jest ważne albo nie i pilne albo nie. Zadania mają notatki, osobę odpowiedzialną, datę rozpoczęcia i termin, a także mogą wskazywać swoje źródło, np. węzeł mapy myśli."
+    },
+    "capabilities": [
+      {
+        "id": "find",
+        "title": {
+          "en": "Find todos and show them in the app",
+          "de": "Aufgaben finden und in der App zeigen",
+          "es": "Buscar tareas y mostrarlas en la app",
+          "fr": "Trouver des tâches et les afficher dans l’app",
+          "it": "Trovare attività e mostrarle nell’app",
+          "nb": "Finne gjøremål og vise dem i appen",
+          "nl": "Taken zoeken en in de app tonen",
+          "pl": "Wyszukiwanie zadań i pokazywanie ich w aplikacji"
+        },
+        "tools": ["get_context", "list", "show"]
+      },
+      {
+        "id": "edit",
+        "title": {
+          "en": "Create, change, complete and delete todos",
+          "de": "Aufgaben anlegen, ändern, erledigen und löschen",
+          "es": "Crear, cambiar, completar y eliminar tareas",
+          "fr": "Créer, modifier, terminer et supprimer des tâches",
+          "it": "Creare, modificare, completare ed eliminare attività",
+          "nb": "Opprette, endre, fullføre og slette gjøremål",
+          "nl": "Taken aanmaken, wijzigen, afronden en verwijderen",
+          "pl": "Tworzenie, zmiana, kończenie i usuwanie zadań"
+        },
+        "tools": ["create", "update", "complete", "delete"]
+      },
+      {
+        "id": "people",
+        "title": {
+          "en": "Assign todos to people from the directory",
+          "de": "Aufgaben Personen aus dem Verzeichnis zuweisen",
+          "es": "Asignar tareas a personas del directorio",
+          "fr": "Attribuer des tâches à des personnes de l’annuaire",
+          "it": "Assegnare attività a persone della rubrica",
+          "nb": "Tildele gjøremål til personer i katalogen",
+          "nl": "Taken toewijzen aan personen uit de adreslijst",
+          "pl": "Przypisywanie zadań osobom z katalogu"
+        },
+        "tools": ["users_search"]
+      },
+      {
+        "id": "history",
+        "title": {
+          "en": "Review and undo changes",
+          "de": "Änderungen nachvollziehen und rückgängig machen",
+          "es": "Revisar y deshacer cambios",
+          "fr": "Consulter et annuler des modifications",
+          "it": "Rivedere e annullare le modifiche",
+          "nb": "Se gjennom og angre endringer",
+          "nl": "Wijzigingen bekijken en ongedaan maken",
+          "pl": "Przegląd i cofanie zmian"
+        },
+        "tools": ["history", "undo", "redo"]
+      }
+    ],
+    "examples": {
+      "en": [
+        "What do I have to do this week?",
+        "Add todos for the tax return: collect receipts by Friday, book the advisor appointment",
+        "Which todos are overdue, and which of them are assigned to Paul?",
+        "Move the newsletter draft out of the urgent quadrant and give it a due date at the end of the month",
+        "Create a todo for every open task in the launch mind map"
+      ],
+      "de": [
+        "Was muss ich diese Woche erledigen?",
+        "Leg Aufgaben für die Steuererklärung an: Belege bis Freitag sammeln, Termin beim Steuerberater buchen",
+        "Welche Aufgaben sind überfällig, und welche davon sind Paul zugewiesen?",
+        "Nimm den Newsletter-Entwurf aus dem dringenden Quadranten und gib ihm als Fälligkeit das Monatsende",
+        "Leg für jede offene Aufgabe in der Launch-Mindmap ein To-do an"
+      ],
+      "es": [
+        "¿Qué tengo que hacer esta semana?",
+        "Añade tareas para la declaración de la renta: reunir los recibos antes del viernes y pedir cita con el asesor",
+        "¿Qué tareas están vencidas y cuáles de ellas están asignadas a Paul?",
+        "Saca el borrador del boletín del cuadrante urgente y ponle como vencimiento el final de mes",
+        "Crea una tarea por cada tarea abierta del mapa mental del lanzamiento"
+      ],
+      "fr": [
+        "Qu’est-ce que je dois faire cette semaine ?",
+        "Ajoute des tâches pour la déclaration d’impôts : rassembler les justificatifs d’ici vendredi, prendre rendez-vous avec le conseiller",
+        "Quelles tâches sont en retard, et lesquelles sont attribuées à Paul ?",
+        "Sors le brouillon de la newsletter du quadrant urgent et donne-lui la fin du mois comme échéance",
+        "Crée une tâche pour chaque tâche ouverte de la carte mentale du lancement"
+      ],
+      "it": [
+        "Cosa devo fare questa settimana?",
+        "Aggiungi attività per la dichiarazione dei redditi: raccogliere le ricevute entro venerdì, prenotare l’appuntamento con il commercialista",
+        "Quali attività sono scadute e quali di queste sono assegnate a Paul?",
+        "Togli la bozza della newsletter dal quadrante urgente e dalle come scadenza la fine del mese",
+        "Crea un’attività per ogni attività aperta nella mappa mentale del lancio"
+      ],
+      "nb": [
+        "Hva må jeg gjøre denne uken?",
+        "Legg til gjøremål for selvangivelsen: samle kvitteringer innen fredag, bestill time hos regnskapsføreren",
+        "Hvilke gjøremål er forfalt, og hvilke av dem er tildelt Paul?",
+        "Flytt utkastet til nyhetsbrevet ut av den hastende kvadranten og gi det forfall ved månedsslutt",
+        "Opprett et gjøremål for hver åpne oppgave i lanseringskartet"
+      ],
+      "nl": [
+        "Wat moet ik deze week doen?",
+        "Voeg taken toe voor de belastingaangifte: bonnetjes verzamelen vóór vrijdag, afspraak met de adviseur maken",
+        "Welke taken zijn te laat, en welke daarvan zijn aan Paul toegewezen?",
+        "Haal het nieuwsbriefconcept uit het urgente kwadrant en geef het als vervaldatum het einde van de maand",
+        "Maak een taak aan voor elke open taak in de launch-mindmap"
+      ],
+      "pl": [
+        "Co mam do zrobienia w tym tygodniu?",
+        "Dodaj zadania do zeznania podatkowego: zebrać rachunki do piątku, umówić wizytę u doradcy",
+        "Które zadania są po terminie i które z nich są przypisane do Paula?",
+        "Przenieś szkic newslettera z pilnej ćwiartki i ustaw mu termin na koniec miesiąca",
+        "Utwórz zadanie dla każdego otwartego zadania w mapie myśli premiery"
+      ]
+    },
+    "limits": {
+      "en": [
+        "One create, update, complete or delete call takes at most 100 todos; a list call returns at most 500 (100 by default).",
+        "There are no tools for attachments: agents see how many files a todo has, but cannot read, add or export them.",
+        "Undo, redo and history cover the last 50 steps of the current TodoManager session only.",
+        "While TodoManager shows an older state (time travel), every write is refused.",
+        "Showing todos in the app only works for databases the board shows; the user turns others on under Sources.",
+        "Assigning people from the directory needs TodoManager's directory permission in Haven; otherwise assignees are free text.",
+        "Search reads this device's copy, at most 1000 todos per database. Without a full-text index, topic search only matches literal words."
+      ]
+    },
+    "guide": {
+      "en": "agent/agent.en.md"
+    }
   }
 }
