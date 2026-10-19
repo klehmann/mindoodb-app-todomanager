@@ -16,8 +16,9 @@ import {
   type MindooDBAppDatabaseInfo,
 } from "mindoodb-app-sdk";
 
-import { createTodoUndo, type TodoChange } from "@/features/undo/todoUndo";
+import { createTodoUndo, type TodoChange, type TodoUndoStep } from "@/features/undo/todoUndo";
 import { toStoredTodoFields } from "@/features/todos/composables/todoStoredValues";
+import { formatFileSize, t, tn } from "@/lib/i18n";
 
 import {
   buildTodoSelectionKey,
@@ -66,17 +67,15 @@ async function readAttachmentBlob(
 }
 
 function formatAttachmentSize(size: number) {
-  if (!Number.isFinite(size) || size < 1024) {
-    return `${Math.max(0, Math.round(size || 0))} B`;
-  }
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = size / 1024;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex += 1;
-  }
-  return `${value >= 100 ? value.toFixed(0) : value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${units[unitIndex]}`;
+  return formatFileSize(size);
+}
+
+/** What an undo/redo step touched, for the notification: the subject or a count, marked when an agent made it. */
+function describeUndoStep(step: TodoUndoStep) {
+  const what = step.changes.length === 1
+    ? t("undoWhatSubject", { subject: step.changes[0].subject })
+    : tn("undoWhatCount", step.changes.length);
+  return step.byAgent ? t("undoByAgent", { what }) : what;
 }
 
 /** Document fields searched (and indexed) by the built-in full-text search. */
@@ -154,7 +153,7 @@ export function useTodos(options: UseTodosOptions) {
   );
   function assertWritable() {
     if (isTimeTravelActive.value) {
-      throw new Error("Time travel mode is read-only.");
+      throw new Error(t("timeTravelReadOnly"));
     }
   }
   const databaseInfoById = computed<Record<string, MindooDBAppDatabaseInfo>>(
@@ -773,7 +772,7 @@ export function useTodos(options: UseTodosOptions) {
     try {
       await listAllTodos();
     } catch (error) {
-      options.error.value = readErrorMessage(error, "Failed to refresh todos.");
+      options.error.value = readErrorMessage(error, t("refreshFailed"));
       throw error;
     } finally {
       options.loading.value = false;
@@ -820,7 +819,7 @@ export function useTodos(options: UseTodosOptions) {
     const todo = findTodoBySelectionKey(todoKey);
     const items = todo?.attachments;
     if (!items?.length) {
-      return "No attachments";
+      return t("noAttachments");
     }
 
     return items
@@ -842,12 +841,12 @@ export function useTodos(options: UseTodosOptions) {
       return;
     }
     if (!canManageTodoAttachments(todo.selectionKey)) {
-      throw new Error("This todo does not allow managing attachments.");
+      throw new Error(t("attachmentsNotAllowed"));
     }
 
     const database = await options.getDatabase(todo.databaseId);
     if (!database) {
-      throw new Error("Failed to open the todo database.");
+      throw new Error(t("databaseOpenFailed"));
     }
 
     options.busyAction.value = "Uploading attachment";
@@ -876,13 +875,11 @@ export function useTodos(options: UseTodosOptions) {
 
       attachmentUploadInputKey.value += 1;
       await listAllTodos();
-      options.setSuccess(
-        `Uploaded ${files.length} attachment${files.length === 1 ? "" : "s"}.`,
-      );
+      options.setSuccess(tn("uploaded", files.length));
     } catch (uploadError) {
       options.error.value = readErrorMessage(
         uploadError,
-        "The attachment upload failed.",
+        t("uploadFailed"),
       );
       throw uploadError;
     } finally {
@@ -905,7 +902,7 @@ export function useTodos(options: UseTodosOptions) {
 
     const database = await options.getDatabase(todo.databaseId);
     if (!database) {
-      throw new Error("Failed to open the todo database.");
+      throw new Error(t("databaseOpenFailed"));
     }
 
     options.busyAction.value = "Scanning attachment";
@@ -920,12 +917,12 @@ export function useTodos(options: UseTodosOptions) {
       if (result.ok) {
         attachmentUploadInputKey.value += 1;
         await listAllTodos();
-        options.setSuccess("Scanned document attached.");
+        options.setSuccess(t("scanned"));
       }
     } catch (scanError) {
       options.error.value = readErrorMessage(
         scanError,
-        "The document scan failed.",
+        t("scanFailed"),
       );
       throw scanError;
     } finally {
@@ -941,7 +938,7 @@ export function useTodos(options: UseTodosOptions) {
 
     const database = await options.getDatabase(todo.databaseId);
     if (!database) {
-      throw new Error("Failed to open the todo database.");
+      throw new Error(t("databaseOpenFailed"));
     }
 
     options.busyAction.value = "Opening attachment preview";
@@ -952,7 +949,7 @@ export function useTodos(options: UseTodosOptions) {
     } catch (previewError) {
       options.error.value = readErrorMessage(
         previewError,
-        "The attachment preview could not be opened.",
+        t("previewFailed"),
       );
       throw previewError;
     } finally {
@@ -968,7 +965,7 @@ export function useTodos(options: UseTodosOptions) {
 
     const database = await options.getDatabase(todo.databaseId);
     if (!database) {
-      throw new Error("Failed to open the todo database.");
+      throw new Error(t("databaseOpenFailed"));
     }
 
     options.busyAction.value = "Extracting attachment";
@@ -985,7 +982,7 @@ export function useTodos(options: UseTodosOptions) {
     } catch (downloadError) {
       options.error.value = readErrorMessage(
         downloadError,
-        "The attachment could not be extracted.",
+        t("extractFailed"),
       );
       throw downloadError;
     } finally {
@@ -1002,7 +999,7 @@ export function useTodos(options: UseTodosOptions) {
 
     const database = await options.getDatabase(todo.databaseId);
     if (!database) {
-      throw new Error("Failed to open the todo database.");
+      throw new Error(t("databaseOpenFailed"));
     }
 
     options.busyAction.value = "Removing attachment";
@@ -1012,11 +1009,11 @@ export function useTodos(options: UseTodosOptions) {
       await database.attachments.remove(todo.id, attachmentName);
       attachmentUploadInputKey.value += 1;
       await listAllTodos();
-      options.setSuccess(`Removed attachment ${attachmentName}.`);
+      options.setSuccess(t("removed", { name: attachmentName }));
     } catch (removeError) {
       options.error.value = readErrorMessage(
         removeError,
-        "The attachment could not be removed.",
+        t("removeFailed"),
       );
       throw removeError;
     } finally {
@@ -1037,7 +1034,7 @@ export function useTodos(options: UseTodosOptions) {
   async function requireDatabase(databaseId: string) {
     const database = await options.getDatabase(databaseId);
     if (!database) {
-      throw new Error("Failed to open the todo database.");
+      throw new Error(t("databaseOpenFailed"));
     }
     return database;
   }
@@ -1061,7 +1058,7 @@ export function useTodos(options: UseTodosOptions) {
     assertWritable();
     const changes: TodoChange[] = [];
     for (const input of inputs) {
-      requireCapability(input.databaseId, "create", "The selected database does not allow creating todos.");
+      requireCapability(input.databaseId, "create", t("createNotAllowed"));
     }
     for (const input of inputs) {
       const database = await requireDatabase(input.databaseId);
@@ -1106,7 +1103,7 @@ export function useTodos(options: UseTodosOptions) {
   ) {
     assertWritable();
     for (const edit of edits) {
-      requireCapability(edit.todo.databaseId, "update", "One or more databases do not allow updating todos.");
+      requireCapability(edit.todo.databaseId, "update", t("updateNotAllowed"));
     }
     const changes: TodoChange[] = [];
     for (const edit of edits) {
@@ -1135,7 +1132,7 @@ export function useTodos(options: UseTodosOptions) {
   async function removeTodos(list: TodoItem[], label: string, byAgent = false) {
     assertWritable();
     for (const todo of list) {
-      requireCapability(todo.databaseId, "delete", "One or more databases do not allow deleting todos.");
+      requireCapability(todo.databaseId, "delete", t("deleteNotAllowed"));
     }
     const changes: TodoChange[] = [];
     for (const todo of list) {
@@ -1171,10 +1168,10 @@ export function useTodos(options: UseTodosOptions) {
     try {
       const [step] = await todoUndo.undo();
       if (step) {
-        options.setSuccess(`Undid "${step.label}".`);
+        options.setSuccess(t("undone", { what: describeUndoStep(step) }));
       }
     } catch (error) {
-      options.error.value = readErrorMessage(error, "Failed to undo.");
+      options.error.value = readErrorMessage(error, t("undoFailed"));
     } finally {
       options.busyAction.value = null;
     }
@@ -1189,10 +1186,10 @@ export function useTodos(options: UseTodosOptions) {
     try {
       const [step] = await todoUndo.redo();
       if (step) {
-        options.setSuccess(`Redid "${step.label}".`);
+        options.setSuccess(t("redone", { what: describeUndoStep(step) }));
       }
     } catch (error) {
-      options.error.value = readErrorMessage(error, "Failed to redo.");
+      options.error.value = readErrorMessage(error, t("redoFailed"));
     } finally {
       options.busyAction.value = null;
     }
@@ -1202,7 +1199,7 @@ export function useTodos(options: UseTodosOptions) {
     assertWritable();
     const nextSubject = draft.value.subject.trim();
     if (!nextSubject) {
-      options.error.value = "A subject is required.";
+      options.error.value = t("subjectRequired");
       return;
     }
 
@@ -1215,7 +1212,7 @@ export function useTodos(options: UseTodosOptions) {
         const targetDatabaseId =
           draftDatabaseId.value ?? defaultDraftDatabaseId();
         if (!targetDatabaseId) {
-          throw new Error("No target database is available for new todos.");
+          throw new Error(t("noTargetDatabase"));
         }
 
         const { created } = await createTodos(
@@ -1225,14 +1222,14 @@ export function useTodos(options: UseTodosOptions) {
         setSelectedTodoIds(
           created.map((entry) => buildTodoSelectionKey(entry.databaseId, entry.id)),
         );
-        options.setSuccess(`Created todo "${nextSubject}".`);
+        options.setSuccess(t("created", { subject: nextSubject }));
       } else {
         const current =
           todos.value.find(
             (todo) => todo.selectionKey === dialogTodoId.value,
           ) ?? null;
         if (!current) {
-          throw new Error("The todo could not be found.");
+          throw new Error(t("todoNotFound"));
         }
 
         // A typed assignee no longer names the directory person picked before.
@@ -1251,12 +1248,12 @@ export function useTodos(options: UseTodosOptions) {
           `Edit "${nextSubject}"`,
         );
         setSelectedTodoIds([current.selectionKey]);
-        options.setSuccess(`Saved todo "${nextSubject}".`);
+        options.setSuccess(t("saved", { subject: nextSubject }));
       }
 
       dialogVisible.value = false;
     } catch (error) {
-      options.error.value = readErrorMessage(error, "Failed to save the todo.");
+      options.error.value = readErrorMessage(error, t("saveFailed"));
       throw error;
     } finally {
       options.busyAction.value = null;
@@ -1283,15 +1280,11 @@ export function useTodos(options: UseTodosOptions) {
         todosToDelete.length > 1 ? `Delete ${todosToDelete.length} todos` : `Delete "${todosToDelete[0].subject}"`,
       );
       clearSelection();
-      options.setSuccess(
-        todoIds.length > 1
-          ? `Deleted ${todoIds.length} todos.`
-          : "Deleted todo.",
-      );
+      options.setSuccess(tn("deleted", todoIds.length));
     } catch (error) {
       options.error.value = readErrorMessage(
         error,
-        "Failed to delete the selected todos.",
+        t("deleteFailed"),
       );
       throw error;
     } finally {
@@ -1326,13 +1319,11 @@ export function useTodos(options: UseTodosOptions) {
       );
       setSelectedTodoIds(todoIds);
       activeMobileQuadrant.value = quadrant;
-      options.setSuccess(
-        todoIds.length > 1 ? `Moved ${todoIds.length} todos.` : "Moved todo.",
-      );
+      options.setSuccess(tn("moved", todoIds.length));
     } catch (error) {
       options.error.value = readErrorMessage(
         error,
-        "Failed to move the selected todos.",
+        t("moveFailed"),
       );
       throw error;
     } finally {
@@ -1365,19 +1356,11 @@ export function useTodos(options: UseTodosOptions) {
         completed ? `Complete ${what}` : `Reopen ${what}`,
       );
       setSelectedTodoIds(todoIds);
-      options.setSuccess(
-        completed
-          ? todoIds.length > 1
-            ? `Marked ${todoIds.length} todos as completed.`
-            : "Marked todo as completed."
-          : todoIds.length > 1
-            ? `Marked ${todoIds.length} todos as not completed.`
-            : "Marked todo as not completed.",
-      );
+      options.setSuccess(tn(completed ? "markedCompleted" : "markedNotCompleted", todoIds.length));
     } catch (error) {
       options.error.value = readErrorMessage(
         error,
-        "Failed to update the selected todos.",
+        t("updateFailed"),
       );
       throw error;
     } finally {

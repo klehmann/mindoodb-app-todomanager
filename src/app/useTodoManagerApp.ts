@@ -14,6 +14,7 @@ import { useTodoAgentTools } from "@/features/agent/useTodoAgentTools";
 import { usePeriodicSync } from "@/features/sync/composables/usePeriodicSync";
 import { useTodos } from "@/features/todos/composables/useTodos";
 import type { TodoQuadrant, TodoSyncMode } from "@/features/todos/composables/todoTypes";
+import { formatDateTime, setLocale, t } from "@/lib/i18n";
 import { applyAppTheme, normalizeAppTheme } from "@/lib/theme";
 
 function readErrorMessage(error: unknown, fallback: string) {
@@ -42,6 +43,7 @@ export function useTodoManagerApp() {
   let stopThemeSync: (() => void) | null = null;
   let stopViewportSync: (() => void) | null = null;
   let stopUiPreferencesSync: (() => void) | null = null;
+  let stopLocaleSync: (() => void) | null = null;
   const handleWindowResize = () => {
     localViewportWidth.value = window.innerWidth;
   };
@@ -59,7 +61,7 @@ export function useTodoManagerApp() {
   );
   const isTimeTravelActive = computed(() => launchContext.value?.timeTravelDate != null);
   const timeTravelDateLabel = computed(() =>
-    launchContext.value?.timeTravelDate == null ? "" : new Date(launchContext.value.timeTravelDate).toLocaleString(),
+    launchContext.value?.timeTravelDate == null ? "" : formatDateTime(launchContext.value.timeTravelDate),
   );
   const canRead = computed(() => selectedReadableDatabases.value.length > 0);
   const canCreate = computed(() => !isTimeTravelActive.value && databases.value.some((entry) => entry.capabilities.includes("create")));
@@ -98,7 +100,9 @@ export function useTodoManagerApp() {
     stopThemeSync?.();
     stopViewportSync?.();
     stopUiPreferencesSync?.();
+    stopLocaleSync?.();
 
+    setLocale(context.locale);
     applyHostTheme(context.theme);
     setViewport(context.viewport);
     setUiPreferences(context.uiPreferences);
@@ -112,6 +116,9 @@ export function useTodoManagerApp() {
     stopUiPreferencesSync = nextSession.onUiPreferencesChange((uiPreferences) => {
       setUiPreferences(uiPreferences);
     });
+    stopLocaleSync = nextSession.onLocaleChange((locale) => {
+      setLocale(locale);
+    });
   }
 
   function teardownSubscriptions() {
@@ -121,6 +128,8 @@ export function useTodoManagerApp() {
     stopViewportSync = null;
     stopUiPreferencesSync?.();
     stopUiPreferencesSync = null;
+    stopLocaleSync?.();
+    stopLocaleSync = null;
   }
 
   const todos = useTodos({
@@ -182,7 +191,7 @@ export function useTodoManagerApp() {
       applyAppTheme();
       error.value = readErrorMessage(
         connectError,
-        "Failed to connect to MindooDB Haven. Launch the app from Haven or provide a compatible bridge host.",
+        t("connectFailed"),
       );
     } finally {
       loading.value = false;
@@ -245,7 +254,7 @@ export function useTodoManagerApp() {
       selectedDatabaseIds.value = nextDatabaseIds;
       await todos.refreshTodos();
     } catch (databaseError) {
-      error.value = readErrorMessage(databaseError, "Failed to load the selected databases.");
+      error.value = readErrorMessage(databaseError, t("loadDatabasesFailed"));
       throw databaseError;
     } finally {
       loading.value = false;
@@ -255,7 +264,7 @@ export function useTodoManagerApp() {
   async function refreshNow() {
     const succeeded = await periodicSync.runSync("manual");
     if (succeeded) {
-      setSuccess("Sync complete.");
+      setSuccess(t("syncComplete"));
     } else if (periodicSync.syncError.value) {
       error.value = periodicSync.syncError.value;
     }

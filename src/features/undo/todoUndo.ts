@@ -11,6 +11,7 @@ import { computed, ref } from "vue";
 
 import type { TodoSnapshot } from "@/features/todos/composables/todoTypes";
 import { toStoredTodoFields } from "@/features/todos/composables/todoStoredValues";
+import { t } from "@/lib/i18n";
 
 export type TodoChange = {
   databaseId: string;
@@ -71,7 +72,7 @@ export function createTodoUndo(options: {
   async function writeState(change: TodoChange, target: TodoSnapshot | null, current: TodoSnapshot | null) {
     const database = await options.getDatabase(change.databaseId);
     if (!database) {
-      throw new Error("The todo's database is not available.");
+      throw new Error(t("undoDatabaseMissing"));
     }
     if (target === null) {
       await database.documents.delete(change.todoId);

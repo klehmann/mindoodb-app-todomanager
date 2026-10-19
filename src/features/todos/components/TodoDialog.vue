@@ -11,6 +11,7 @@ import Tabs from "primevue/tabs";
 
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
 import { TODO_QUADRANTS } from "@/features/todos/composables/todoTypes";
+import { quadrantLabels, t, type MessageKey } from "@/lib/i18n";
 
 const props = defineProps<{
   app: ReturnType<typeof useTodoManagerApp>;
@@ -130,27 +131,28 @@ function copyWithTextareaFallback(value: string) {
   }
 }
 
-async function copyInfoValue(value: string, label: string) {
+async function copyInfoValue(value: string, labelKey: MessageKey) {
+  const label = t(labelKey);
   if (!value) {
     return;
   }
 
   try {
     if (copyWithTextareaFallback(value)) {
-      copiedInfoLabel.value = `${label} copied.`;
+      copiedInfoLabel.value = t("copied", { label });
       return;
     }
 
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(value);
-      copiedInfoLabel.value = `${label} copied.`;
+      copiedInfoLabel.value = t("copied", { label });
       return;
     }
   } catch {
     // Fall through to the shared failure message below.
   }
 
-  copiedInfoLabel.value = `Unable to copy ${label.toLowerCase()}.`;
+  copiedInfoLabel.value = t("copyFailed", { label });
 }
 </script>
 
@@ -160,29 +162,29 @@ async function copyInfoValue(value: string, label: string) {
     modal
     :header="
       props.app.dialogMode.value === 'create'
-        ? 'New To Do Entry'
-        : 'To Do Entry'
+        ? t('dialogCreateTitle')
+        : t('dialogEditTitle')
     "
     :style="{ width: '44rem', maxWidth: '96vw' }"
   >
     <div class="dialog-shell">
       <Tabs v-model:value="activeTab" class="dialog-tabs">
         <TabList>
-          <Tab value="general">General</Tab>
-          <Tab value="attachments">Attachments</Tab>
-          <Tab value="info">Info</Tab>
+          <Tab value="general">{{ t("tabGeneral") }}</Tab>
+          <Tab value="attachments">{{ t("tabAttachments") }}</Tab>
+          <Tab value="info">{{ t("tabInfo") }}</Tab>
         </TabList>
 
         <TabPanels>
           <TabPanel value="general">
             <div class="dialog-general">
               <label class="field">
-                <span class="field__label">Subject</span>
+                <span class="field__label">{{ t("subject") }}</span>
                 <input
                   :value="props.app.draft.value.subject"
                   class="native-input"
                   type="text"
-                  placeholder="Todo subject"
+                  :placeholder="t('subjectPlaceholder')"
                   @input="
                     props.app.setDraft(
                       'subject',
@@ -193,12 +195,12 @@ async function copyInfoValue(value: string, label: string) {
               </label>
 
               <label class="field">
-                <span class="field__label">Assigned to</span>
+                <span class="field__label">{{ t("assignedTo") }}</span>
                 <input
                   :value="props.app.draft.value.assignedTo"
                   class="native-input"
                   type="text"
-                  placeholder="Who owns this todo?"
+                  :placeholder="t('assignedToPlaceholder')"
                   @input="
                     props.app.setDraft(
                       'assignedTo',
@@ -210,7 +212,7 @@ async function copyInfoValue(value: string, label: string) {
 
               <div class="dialog-grid">
                 <label class="field">
-                  <span class="field__label">Quadrant</span>
+                  <span class="field__label">{{ t("quadrant") }}</span>
                   <select
                     class="native-select"
                     :value="String(props.app.draft.value.quadrant)"
@@ -230,14 +232,13 @@ async function copyInfoValue(value: string, label: string) {
                       :key="entry.quadrant"
                       :value="entry.quadrant"
                     >
-                      Q{{ entry.quadrant }} - {{ entry.subtitle }} /
-                      {{ entry.title }}
+                      {{ t("quadrantOption", { number: entry.quadrant, ...quadrantLabels(entry.quadrant) }) }}
                     </option>
                   </select>
                 </label>
 
                 <label class="field">
-                  <span class="field__label">Due by</span>
+                  <span class="field__label">{{ t("dueBy") }}</span>
                   <input
                     :value="toDateInput(props.app.draft.value.dueAt)"
                     class="native-input"
@@ -254,7 +255,7 @@ async function copyInfoValue(value: string, label: string) {
                 </label>
 
                 <label class="field">
-                  <span class="field__label">Start by</span>
+                  <span class="field__label">{{ t("startBy") }}</span>
                   <input
                     :value="toDateInput(props.app.draft.value.startAt)"
                     class="native-input"
@@ -272,11 +273,11 @@ async function copyInfoValue(value: string, label: string) {
               </div>
 
               <label class="field">
-                <span class="field__label">Description</span>
+                <span class="field__label">{{ t("description") }}</span>
                 <textarea
                   :value="props.app.draft.value.description"
                   class="native-textarea"
-                  placeholder="Describe the todo"
+                  :placeholder="t('descriptionPlaceholder')"
                   @input="
                     props.app.setDraft(
                       'description',
@@ -294,7 +295,7 @@ async function copyInfoValue(value: string, label: string) {
                     props.app.setDraft('completed', Boolean($event))
                   "
                 />
-                <span>Completed</span>
+                <span>{{ t("completed") }}</span>
               </label>
             </div>
           </TabPanel>
@@ -312,7 +313,7 @@ async function copyInfoValue(value: string, label: string) {
             >
               <div class="dialog-panel__header attachments-panel__header">
                 <div>
-                  <h3>Attachments</h3>
+                  <h3>{{ t("attachments") }}</h3>
                 </div>
                 <div class="attachments-panel__controls">
                   <label
@@ -334,10 +335,10 @@ async function copyInfoValue(value: string, label: string) {
                       "
                       @change="handleUpload"
                     />
-                    <span>Upload</span>
+                    <span>{{ t("upload") }}</span>
                   </label>
                   <Button
-                    label="Scan document"
+                    :label="t('scanDocument')"
                     severity="secondary"
                     :disabled="
                       !props.app.canManageDialogAttachments.value ||
@@ -352,13 +353,13 @@ async function copyInfoValue(value: string, label: string) {
                 v-if="props.app.dialogMode.value !== 'edit'"
                 class="panel__empty"
               >
-                Save the todo before adding attachments.
+                {{ t("saveBeforeAttachments") }}
               </p>
               <p
                 v-else-if="!props.app.canUseDialogAttachments.value"
                 class="panel__empty"
               >
-                Attachment actions are unavailable for this database binding.
+                {{ t("attachmentsUnavailable") }}
               </p>
               <p
                 v-else-if="
@@ -367,7 +368,7 @@ async function copyInfoValue(value: string, label: string) {
                 "
                 class="attachments-panel__hint"
               >
-                Drop files here to attach them to this todo.
+                {{ t("dropFilesHint") }}
               </p>
 
               <div
@@ -392,8 +393,8 @@ async function copyInfoValue(value: string, label: string) {
                       rounded
                       text
                       severity="secondary"
-                      :aria-label="`Preview ${attachment.fileName}`"
-                      :title="`Preview ${attachment.fileName}`"
+                      :aria-label="t('previewFile', { name: attachment.fileName })"
+                      :title="t('previewFile', { name: attachment.fileName })"
                       :disabled="
                         !props.app.canUseDialogAttachments.value ||
                         !props.app.canPreviewDialogAttachment(
@@ -411,8 +412,8 @@ async function copyInfoValue(value: string, label: string) {
                       rounded
                       text
                       severity="secondary"
-                      :aria-label="`Extract ${attachment.fileName}`"
-                      :title="`Extract ${attachment.fileName}`"
+                      :aria-label="t('extractFile', { name: attachment.fileName })"
+                      :title="t('extractFile', { name: attachment.fileName })"
                       :disabled="
                         !props.app.canUseDialogAttachments.value ||
                         props.app.isBusy.value
@@ -426,8 +427,8 @@ async function copyInfoValue(value: string, label: string) {
                       rounded
                       text
                       severity="danger"
-                      :aria-label="`Remove ${attachment.fileName}`"
-                      :title="`Remove ${attachment.fileName}`"
+                      :aria-label="t('removeFile', { name: attachment.fileName })"
+                      :title="t('removeFile', { name: attachment.fileName })"
                       :disabled="
                         !props.app.canManageDialogAttachments.value ||
                         props.app.isBusy.value
@@ -446,7 +447,7 @@ async function copyInfoValue(value: string, label: string) {
                 "
                 class="panel__empty"
               >
-                No attachments are stored for this todo.
+                {{ t("noAttachmentsStored") }}
               </p>
             </section>
           </TabPanel>
@@ -455,27 +456,27 @@ async function copyInfoValue(value: string, label: string) {
             <section class="dialog-panel glass-card">
               <div class="dialog-panel__header">
                 <div>
-                  <h3>Identifiers</h3>
+                  <h3>{{ t("identifiers") }}</h3>
                 </div>
               </div>
 
               <div class="dialog-info-stack">
                 <div class="dialog-info-row">
                   <div class="dialog-info-copy">
-                    <span class="field__label">Database id</span>
+                    <span class="field__label">{{ t("databaseId") }}</span>
                     <code class="dialog-info-value">{{
                       props.app.dialogDatabaseId.value ?? "-"
                     }}</code>
                   </div>
                   <Button
-                    label="Copy"
+                    :label="t('copy')"
                     text
                     size="small"
                     :disabled="!props.app.dialogDatabaseId.value"
                     @click="
                       copyInfoValue(
                         props.app.dialogDatabaseId.value ?? '',
-                        'Database id',
+                        'databaseId',
                       )
                     "
                   />
@@ -483,20 +484,20 @@ async function copyInfoValue(value: string, label: string) {
 
                 <div class="dialog-info-row">
                   <div class="dialog-info-copy">
-                    <span class="field__label">Document id</span>
+                    <span class="field__label">{{ t("documentId") }}</span>
                     <code class="dialog-info-value">{{
                       props.app.dialogDocumentId.value ?? "-"
                     }}</code>
                   </div>
                   <Button
-                    label="Copy"
+                    :label="t('copy')"
                     text
                     size="small"
                     :disabled="!props.app.dialogDocumentId.value"
                     @click="
                       copyInfoValue(
                         props.app.dialogDocumentId.value ?? '',
-                        'Document id',
+                        'documentId',
                       )
                     "
                   />
@@ -522,7 +523,7 @@ async function copyInfoValue(value: string, label: string) {
       <div class="dialog-footer">
         <div class="dialog-footer__create-target">
           <span>{{
-            props.app.dialogMode.value === "create" ? "Create in" : "Stored in"
+            props.app.dialogMode.value === "create" ? t("createIn") : t("storedIn")
           }}</span>
           <select
             :value="props.app.draftDatabaseId.value ?? ''"
@@ -540,9 +541,10 @@ async function copyInfoValue(value: string, label: string) {
               :value="database.id"
               :disabled="!database.capabilities.includes('create')"
             >
-              {{ database.title
-              }}{{
-                database.capabilities.includes("create") ? "" : " (read only)"
+              {{
+                database.capabilities.includes("create")
+                  ? database.title
+                  : t("databaseReadOnly", { title: database.title })
               }}
             </option>
           </select>
@@ -550,12 +552,12 @@ async function copyInfoValue(value: string, label: string) {
 
         <Button
           class="dialog-footer__close"
-          label="Close"
+          :label="t('close')"
           text
           @click="props.app.closeDialog()"
         />
         <Button
-          :label="props.app.dialogMode.value === 'create' ? 'Create' : 'Save'"
+          :label="props.app.dialogMode.value === 'create' ? t('create') : t('save')"
           icon="pi pi-check"
           :disabled="
             props.app.dialogMode.value === 'create' &&

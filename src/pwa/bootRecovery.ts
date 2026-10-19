@@ -1,3 +1,5 @@
+import { bootTexts } from "@/lib/bootMessages";
+
 const TODOMANAGER_SERVICE_WORKER_URL = `${import.meta.env.BASE_URL}sw.js`;
 const TODOMANAGER_SERVICE_WORKER_SCOPE = import.meta.env.BASE_URL || "/";
 const TODOMANAGER_BOOT_RECOVERY_ATTEMPTS_KEY = "mindoodb-todomanager-boot-recovery-attempts";
@@ -35,6 +37,7 @@ function clearRecoveryAttempts() {
 }
 
 function createRecoveryUi() {
+  const texts = bootTexts();
   const root = document.createElement("div");
   root.setAttribute("data-todomanager-boot-recovery", "true");
   root.innerHTML = `
@@ -111,23 +114,25 @@ function createRecoveryUi() {
     </style>
     <div class="todomanager-boot-recovery__panel">
       <p class="todomanager-boot-recovery__eyebrow">MindooDB To Do Manager</p>
-      <h1>Recovering startup</h1>
-      <p data-todomanager-boot-recovery-message>Checking for an updated offline shell so To Do Manager can reload cleanly.</p>
+      <h1></h1>
+      <p data-todomanager-boot-recovery-message></p>
       <div class="todomanager-boot-recovery__actions">
         <button type="button" class="todomanager-boot-recovery__primary" data-todomanager-boot-recovery-retry hidden>
-          Clear cache & reload
         </button>
         <button type="button" class="todomanager-boot-recovery__secondary" data-todomanager-boot-recovery-dismiss hidden>
-          Dismiss
         </button>
       </div>
     </div>
   `;
+  root.querySelector("h1")!.textContent = texts.bootTitle;
   document.body.append(root);
 
   const message = root.querySelector<HTMLElement>("[data-todomanager-boot-recovery-message]");
   const retryButton = root.querySelector<HTMLButtonElement>("[data-todomanager-boot-recovery-retry]");
   const dismissButton = root.querySelector<HTMLButtonElement>("[data-todomanager-boot-recovery-dismiss]");
+  if (message) message.textContent = texts.bootChecking;
+  if (retryButton) retryButton.textContent = texts.bootRetry;
+  if (dismissButton) dismissButton.textContent = texts.bootDismiss;
 
   return {
     setStatus(status: RecoveryStatus) {
@@ -135,13 +140,12 @@ function createRecoveryUi() {
         return;
       }
       if (status === "checking") {
-        message.textContent = "Checking for an updated offline shell so To Do Manager can reload cleanly.";
+        message.textContent = texts.bootChecking;
         retryButton.hidden = true;
         dismissButton.hidden = true;
         return;
       }
-      message.textContent =
-        "To Do Manager hit a startup error. Clear the offline cache for this app and reload to fetch a fresh copy.";
+      message.textContent = texts.bootFailed;
       retryButton.hidden = false;
       dismissButton.hidden = false;
     },

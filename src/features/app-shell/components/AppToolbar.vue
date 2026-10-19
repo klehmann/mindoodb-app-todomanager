@@ -6,6 +6,7 @@ import type { MenuItem } from "primevue/menuitem";
 
 import { useTodoManagerApp } from "@/app/useTodoManagerApp";
 import { TODO_QUADRANTS, type TodoFilterMode, type TodoSortMode, type TodoSyncMode } from "@/features/todos/composables/todoTypes";
+import { quadrantLabels, t, tn, type MessageKey } from "@/lib/i18n";
 
 const props = defineProps<{
   app: ReturnType<typeof useTodoManagerApp>;
@@ -14,27 +15,30 @@ const props = defineProps<{
 const helpDialogVisible = ref(false);
 const searchPanelVisible = ref(false);
 
-const refreshModeLabels: Record<TodoSyncMode, string> = {
-  off: "Sync off",
-  "10s": "Every 10 seconds",
-  "30s": "Every 30 seconds",
-  "60s": "Every 60 seconds",
-};
-
 const syncIndicatorVisible = computed(() => props.app.syncState.value === "syncing");
 
-const filterOptions: Array<{ label: string; value: TodoFilterMode }> = [
-  { label: "Open", value: "open" },
-  { label: "Completed", value: "completed" },
-  { label: "All", value: "all" },
+const filterOptions: Array<{ label: MessageKey; value: TodoFilterMode }> = [
+  { label: "filterOpen", value: "open" },
+  { label: "filterCompleted", value: "completed" },
+  { label: "filterAll", value: "all" },
 ];
 
-const sortOptions: Array<{ label: string; value: TodoSortMode }> = [
-  { label: "Recently updated", value: "updated-desc" },
-  { label: "Due date", value: "due-asc" },
-  { label: "Recently created", value: "created-desc" },
-  { label: "Subject", value: "subject-asc" },
+const sortOptions: Array<{ label: MessageKey; value: TodoSortMode }> = [
+  { label: "sortUpdated", value: "updated-desc" },
+  { label: "sortDue", value: "due-asc" },
+  { label: "sortCreated", value: "created-desc" },
+  { label: "sortSubject", value: "subject-asc" },
 ];
+
+const intervalModes: Array<{ mode: Exclude<TodoSyncMode, "off">; seconds: number }> = [
+  { mode: "10s", seconds: 10 },
+  { mode: "30s", seconds: 30 },
+  { mode: "60s", seconds: 60 },
+];
+
+function quadrantButtonLabel(quadrant: 1 | 2 | 3 | 4) {
+  return t("quadrantButton", { number: quadrant, ...quadrantLabels(quadrant) });
+}
 
 function refreshModeIcon(mode: TodoSyncMode) {
   return props.app.refreshMode.value === mode ? "pi pi-check" : undefined;
@@ -75,11 +79,11 @@ function createTodo() {
 
 const menuItems = computed<MenuItem[]>(() => [
   {
-    label: "Sync",
+    label: t("menuSync"),
     icon: "pi pi-cloud",
     items: [
       {
-        label: "Refresh now",
+        label: t("refreshNow"),
         icon: "pi pi-refresh",
         disabled: props.app.isTimeTravelActive.value,
         command: () => {
@@ -87,47 +91,31 @@ const menuItems = computed<MenuItem[]>(() => [
         },
       },
       {
-        label: "Sync off",
+        label: t("syncOff"),
         icon: refreshModeIcon("off"),
         command: () => {
           props.app.setRefreshMode("off");
         },
       },
-      {
-        label: "Every 10 seconds",
-        icon: refreshModeIcon("10s"),
+      ...intervalModes.map(({ mode, seconds }) => ({
+        label: tn("syncEvery", seconds),
+        icon: refreshModeIcon(mode),
         disabled: props.app.isTimeTravelActive.value,
         command: () => {
-          props.app.setRefreshMode("10s");
+          props.app.setRefreshMode(mode);
         },
-      },
-      {
-        label: "Every 30 seconds",
-        icon: refreshModeIcon("30s"),
-        disabled: props.app.isTimeTravelActive.value,
-        command: () => {
-          props.app.setRefreshMode("30s");
-        },
-      },
-      {
-        label: "Every 60 seconds",
-        icon: refreshModeIcon("60s"),
-        disabled: props.app.isTimeTravelActive.value,
-        command: () => {
-          props.app.setRefreshMode("60s");
-        },
-      },
+      })),
     ],
   },
   {
-    label: "Sources",
+    label: t("menuSources"),
     icon: "pi pi-database",
     items: [
       {
-        label: "Filter",
+        label: t("menuFilter"),
         icon: "pi pi-filter",
         items: filterOptions.map((option) => ({
-          label: option.label,
+          label: t(option.label),
           icon: props.app.filterMode.value === option.value ? "pi pi-check" : sourcesMenuIconOff,
           command: () => {
             props.app.filterMode.value = option.value;
@@ -135,10 +123,10 @@ const menuItems = computed<MenuItem[]>(() => [
         })),
       },
       {
-        label: "Sort",
+        label: t("menuSort"),
         icon: "pi pi-sort-amount-down",
         items: sortOptions.map((option) => ({
-          label: option.label,
+          label: t(option.label),
           icon: props.app.sortMode.value === option.value ? "pi pi-check" : sourcesMenuIconOff,
           command: () => {
             props.app.sortMode.value = option.value;
@@ -146,7 +134,7 @@ const menuItems = computed<MenuItem[]>(() => [
         })),
       },
       {
-        label: "Show search",
+        label: t("showSearch"),
         icon: searchPanelVisible.value ? "pi pi-check" : sourcesMenuIconOff,
         command: () => {
           toggleSearchPanel();
@@ -176,11 +164,11 @@ const menuItems = computed<MenuItem[]>(() => [
     ],
   },
   {
-    label: "Help",
+    label: t("menuHelp"),
     icon: "pi pi-question-circle",
     items: [
       {
-        label: "How TodoManager works",
+        label: t("helpTitle"),
         icon: "pi pi-info-circle",
         command: () => {
           helpDialogVisible.value = true;
@@ -204,13 +192,13 @@ const menuItems = computed<MenuItem[]>(() => [
         @click="createTodo"
       >
         <i class="pi pi-plus" aria-hidden="true" />
-        <span>New todo</span>
+        <span>{{ t("newTodo") }}</span>
       </button>
       <button
         type="button"
         class="toolbar__history-button"
-        title="Undo (Ctrl+Z)"
-        aria-label="Undo"
+        :title="t('undoShortcut')"
+        :aria-label="t('undo')"
         :disabled="!props.app.todoUndo.canUndo.value || props.app.isBusy.value || props.app.isTimeTravelActive.value"
         @click="props.app.undoLastChange()"
       >
@@ -219,8 +207,8 @@ const menuItems = computed<MenuItem[]>(() => [
       <button
         type="button"
         class="toolbar__history-button"
-        title="Redo (Ctrl+Shift+Z)"
-        aria-label="Redo"
+        :title="t('redoShortcut')"
+        :aria-label="t('redo')"
         :disabled="!props.app.todoUndo.canRedo.value || props.app.isBusy.value || props.app.isTimeTravelActive.value"
         @click="props.app.redoLastChange()"
       >
@@ -231,8 +219,8 @@ const menuItems = computed<MenuItem[]>(() => [
           <div
             v-if="syncIndicatorVisible"
             class="toolbar__sync-indicator"
-            aria-label="Refreshing"
-            title="Refreshing"
+            :aria-label="t('refreshing')"
+            :title="t('refreshing')"
           >
             <i class="pi pi-sync pi-spin" aria-hidden="true" />
           </div>
@@ -241,9 +229,9 @@ const menuItems = computed<MenuItem[]>(() => [
       <span
         v-if="props.app.isTimeTravelActive.value"
         class="toolbar__time-travel"
-        :title="`Read-only as of ${props.app.timeTravelDateLabel.value}`"
+        :title="t('timeTravelTitle', { date: props.app.timeTravelDateLabel.value })"
       >
-        Time travel: {{ props.app.timeTravelDateLabel.value }}
+        {{ t("timeTravelBadge", { date: props.app.timeTravelDateLabel.value }) }}
       </span>
     </div>
 
@@ -253,12 +241,12 @@ const menuItems = computed<MenuItem[]>(() => [
         class="toolbar__subrow"
       >
         <label class="toolbar__field toolbar__search">
-          <span>Search</span>
+          <span>{{ t("search") }}</span>
           <input
             :value="props.app.searchQuery.value"
             type="search"
             class="native-input"
-            placeholder="Filter todos..."
+            :placeholder="t('searchPlaceholder')"
             @input="props.app.searchQuery.value = ($event.target as HTMLInputElement).value"
           />
         </label>
@@ -280,6 +268,8 @@ const menuItems = computed<MenuItem[]>(() => [
             && props.app.todoPointerDragState.active,
         }"
         :data-todo-quadrant="entry.quadrant"
+        :aria-label="quadrantButtonLabel(entry.quadrant)"
+        :title="quadrantButtonLabel(entry.quadrant)"
         @click="props.app.setMobileQuadrant(entry.quadrant)"
         @dragover.prevent
         @drop="handleQuadrantDrop(entry.quadrant, $event)"
@@ -292,37 +282,21 @@ const menuItems = computed<MenuItem[]>(() => [
   <Dialog
     v-model:visible="helpDialogVisible"
     modal
-    header="How TodoManager Works"
+    :header="t('helpTitle')"
     :style="{ width: '42rem', maxWidth: '96vw' }"
   >
     <div class="toolbar__help">
-      <p>
-        TodoManager follows the 4 quadrant method: do urgent and important work first, plan important work
-        that is not due soon, delegate or batch less important urgent work, and reduce low-value work where
-        possible.
-      </p>
+      <p>{{ t("helpIntro") }}</p>
       <ul>
-        <li><strong>1:</strong> Important and due soon</li>
-        <li><strong>2:</strong> Important and not due soon</li>
-        <li><strong>3:</strong> Not important and due soon</li>
-        <li><strong>4:</strong> Not important and not due soon</li>
+        <li><strong>1</strong> {{ t("helpQ1") }}</li>
+        <li><strong>2</strong> {{ t("helpQ2") }}</li>
+        <li><strong>3</strong> {{ t("helpQ3") }}</li>
+        <li><strong>4</strong> {{ t("helpQ4") }}</li>
       </ul>
-      <p>
-        Undo and redo (the arrows next to "New todo", or Ctrl+Z and Ctrl+Shift+Z) take back changes of this
-        session, including changes an AI agent made.
-      </p>
-      <p>
-        Use the Sources menu for filter, sort, showing search, and which databases to read from. Drag todos
-        between quadrants to re-prioritize them, or drag them to the recycle bin to delete them.
-      </p>
-      <p>
-        Double click the background of a quadrant on desktop, or double tap it on touch devices, to create a
-        new todo with that quadrant preselected.
-      </p>
-      <p>
-        On touch devices, drag a todo directly to another quadrant target or to the recycle bin, and long press
-        a todo to open its context menu.
-      </p>
+      <p>{{ t("helpUndo") }}</p>
+      <p>{{ t("helpSources") }}</p>
+      <p>{{ t("helpCreate") }}</p>
+      <p>{{ t("helpTouch") }}</p>
     </div>
   </Dialog>
 </template>
@@ -558,6 +532,13 @@ const menuItems = computed<MenuItem[]>(() => [
 
 .toolbar__help ul {
   padding-left: 1.2rem;
+}
+
+/* The quadrant number before its description, without language-specific punctuation. */
+.toolbar__help li strong {
+  display: inline-block;
+  min-width: 1.1em;
+  margin-inline-end: 0.35em;
 }
 
 .toolbar-search-panel-enter-active,
