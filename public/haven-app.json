@@ -26,6 +26,7 @@
   ],
   "publicUrl": "https://app-todomanager.mindoodb.com/",
   "listing": {
+    "shareImage": "listing/share.png",
     "summary": {
       "en": "Visual task workflow using Covey's four-quadrant method with drag and drop.",
       "de": "Visueller Aufgaben-Workflow nach Coveys Vier-Quadranten-Methode mit Drag-and-Drop.",
