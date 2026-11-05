@@ -4,6 +4,7 @@ import {
   onMounted,
   reactive,
   ref,
+  shallowRef,
   watch,
   type ComputedRef,
   type Ref,
@@ -18,7 +19,8 @@ import {
 
 import { createTodoUndo, type TodoChange, type TodoUndoStep } from "@/features/undo/todoUndo";
 import { toStoredTodoFields } from "@/features/todos/composables/todoStoredValues";
-import { formatFileSize, t, tn } from "@/lib/i18n";
+import { formatFileSize, language, t, tn } from "@/lib/i18n";
+import { useAttachmentAvailability } from "@/features/todos/composables/useAttachmentAvailability";
 
 import {
   buildTodoSelectionKey,
@@ -178,6 +180,44 @@ export function useTodos(options: UseTodosOptions) {
         null)
       : null,
   );
+
+  /**
+   * Which of the open todo's files are on this device. Databases that sync
+   * attachments "on demand" keep only own and pinned files locally; the dialog
+   * marks the rest and offers to keep them offline.
+   */
+  const dialogDatabase = shallowRef<MindooDBAppDatabase | null>(null);
+  watch(
+    () => currentDialogTodo.value?.databaseId ?? null,
+    async (databaseId) => {
+      const next = databaseId ? await options.getDatabase(databaseId) : null;
+      if (databaseId === (currentDialogTodo.value?.databaseId ?? null)) dialogDatabase.value = next;
+    },
+    { immediate: true },
+  );
+  const attachmentAvailability = useAttachmentAvailability({
+    database: dialogDatabase,
+    docId: computed(() => currentDialogTodo.value?.id ?? null),
+    attachmentIds: computed(() => dialogAttachments.value.map((attachment) => attachment.attachmentId)),
+    locale: computed(() => language.value),
+    onError(message) {
+      options.error.value = message;
+    },
+  });
+
+  function isDialogAttachmentNotOnDevice(attachmentName: string) {
+    const attachment = dialogAttachments.value.find(
+      (entry) => entry.fileName === attachmentName || entry.attachmentId === attachmentName,
+    );
+    return attachmentAvailability.isNotOnDevice(attachment?.attachmentId ?? attachmentName);
+  }
+
+  /** Failure text for reading a file; names the server for files not on the device. */
+  function attachmentReadError(attachmentName: string, error: unknown, fallback: string) {
+    return isDialogAttachmentNotOnDevice(attachmentName)
+      ? t("offlineReadFailed", { name: attachmentName })
+      : readErrorMessage(error, fallback);
+  }
   const dialogDatabaseId = computed(
     () => currentDialogTodo.value?.databaseId ?? draftDatabaseId.value ?? null,
   );
@@ -941,16 +981,15 @@ export function useTodos(options: UseTodosOptions) {
       throw new Error(t("databaseOpenFailed"));
     }
 
-    options.busyAction.value = "Opening attachment preview";
+    options.busyAction.value = isDialogAttachmentNotOnDevice(attachmentName)
+      ? t("offlineLoadingFromServer")
+      : "Opening attachment preview";
     options.error.value = null;
 
     try {
       await database.attachments.openPreview(todo.id, attachmentName);
     } catch (previewError) {
-      options.error.value = readErrorMessage(
-        previewError,
-        t("previewFailed"),
-      );
+      options.error.value = attachmentReadError(attachmentName, previewError, t("previewFailed"));
       throw previewError;
     } finally {
       options.busyAction.value = null;
@@ -968,7 +1007,9 @@ export function useTodos(options: UseTodosOptions) {
       throw new Error(t("databaseOpenFailed"));
     }
 
-    options.busyAction.value = "Extracting attachment";
+    options.busyAction.value = isDialogAttachmentNotOnDevice(attachmentName)
+      ? t("offlineLoadingFromServer")
+      : "Extracting attachment";
     options.error.value = null;
 
     try {
@@ -980,10 +1021,7 @@ export function useTodos(options: UseTodosOptions) {
       link.click();
       URL.revokeObjectURL(url);
     } catch (downloadError) {
-      options.error.value = readErrorMessage(
-        downloadError,
-        t("extractFailed"),
-      );
+      options.error.value = attachmentReadError(attachmentName, downloadError, t("extractFailed"));
       throw downloadError;
     } finally {
       options.busyAction.value = null;
@@ -1412,6 +1450,7 @@ export function useTodos(options: UseTodosOptions) {
     dialogTodoId,
     draftDatabaseId,
     dialogAttachments,
+    attachmentAvailability,
     dialogDatabaseId,
     dialogDatabaseInfo,
     dialogDocumentId,
