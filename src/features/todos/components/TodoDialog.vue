@@ -28,6 +28,37 @@ function fromDateInput(value: string) {
 const activeTab = ref("general");
 const copiedInfoLabel = ref<string | null>(null);
 const attachmentDragActive = ref(false);
+
+/** Test doubles of the app may lack the availability API: then nothing is marked. */
+const availability = props.app.attachmentAvailability ?? {
+  enabled: ref(false),
+  documentPinned: ref(false),
+  pinBusy: ref(false),
+  missingBytes: ref(0),
+  displayOf: () => null,
+  togglePin: async () => undefined,
+  toggleDocumentPin: async () => undefined,
+};
+
+/** Progress ring: stroke-dasharray for a circle of radius 7. */
+const RING_LENGTH = 2 * Math.PI * 7;
+function ringDash(progress: number | null | undefined) {
+  const done = Math.max(0.04, Math.min(1, progress ?? 0)) * RING_LENGTH;
+  return `${done} ${RING_LENGTH}`;
+}
+
+function availabilityIconClass(icon: string | null | undefined) {
+  switch (icon) {
+    case "cloud":
+      return "pi pi-cloud";
+    case "pin":
+      return "pi pi-thumbtack";
+    case "error":
+      return "pi pi-exclamation-triangle";
+    default:
+      return "";
+  }
+}
 const attachmentDragDepth = ref(0);
 
 watch(
@@ -346,8 +377,36 @@ async function copyInfoValue(value: string, labelKey: MessageKey) {
                     "
                     @click="props.app.scanDialogAttachment"
                   />
+                  <Button
+                    v-if="availability.enabled.value && props.app.dialogAttachments.value.length"
+                    :icon="availability.documentPinned.value ? 'pi pi-thumbtack' : 'pi pi-cloud-download'"
+                    :label="
+                      availability.documentPinned.value
+                        ? t('offlineDocumentUnpin')
+                        : t('offlineDocumentPin')
+                    "
+                    :title="t('offlineDocumentPinHint')"
+                    :aria-pressed="availability.documentPinned.value"
+                    :severity="availability.documentPinned.value ? 'primary' : 'secondary'"
+                    :outlined="availability.documentPinned.value"
+                    :loading="availability.pinBusy.value"
+                    :disabled="availability.pinBusy.value"
+                    @click="availability.toggleDocumentPin()"
+                  />
                 </div>
               </div>
+
+              <p
+                v-if="availability.enabled.value && availability.missingBytes.value"
+                class="attachments-panel__hint attachments-panel__remote-hint"
+              >
+                <i class="pi pi-cloud" aria-hidden="true" />
+                {{
+                  t("offlineMissing", {
+                    size: props.app.formatAttachmentSize(availability.missingBytes.value),
+                  })
+                }}
+              </p>
 
               <p
                 v-if="props.app.dialogMode.value !== 'edit'"
@@ -380,6 +439,35 @@ async function copyInfoValue(value: string, labelKey: MessageKey) {
                   :key="attachment.attachmentId"
                   class="attachment-item"
                 >
+                  <span
+                    v-if="availability.displayOf(attachment.attachmentId)?.icon"
+                    class="attachment-item__availability"
+                    :class="`attachment-item__availability--${availability.displayOf(attachment.attachmentId)?.icon}`"
+                    role="img"
+                    :aria-label="availability.displayOf(attachment.attachmentId)?.label"
+                    :title="availability.displayOf(attachment.attachmentId)?.label"
+                  >
+                    <svg
+                      v-if="availability.displayOf(attachment.attachmentId)?.icon === 'download'"
+                      class="attachment-item__ring"
+                      viewBox="0 0 18 18"
+                      aria-hidden="true"
+                    >
+                      <circle cx="9" cy="9" r="7" class="attachment-item__ring-track" />
+                      <circle
+                        cx="9"
+                        cy="9"
+                        r="7"
+                        class="attachment-item__ring-done"
+                        :stroke-dasharray="ringDash(availability.displayOf(attachment.attachmentId)?.progress)"
+                      />
+                    </svg>
+                    <i
+                      v-else
+                      :class="availabilityIconClass(availability.displayOf(attachment.attachmentId)?.icon)"
+                      aria-hidden="true"
+                    />
+                  </span>
                   <div class="attachment-item__details">
                     <strong>{{ attachment.fileName }}</strong>
                     <p>
@@ -388,6 +476,31 @@ async function copyInfoValue(value: string, labelKey: MessageKey) {
                     </p>
                   </div>
                   <div class="attachment-item__actions">
+                    <Button
+                      v-if="
+                        availability.enabled.value &&
+                        !availability.documentPinned.value &&
+                        availability.displayOf(attachment.attachmentId)?.action
+                      "
+                      icon="pi pi-thumbtack"
+                      rounded
+                      class="attachment-item__pin"
+                      :class="{
+                        'attachment-item__pin--active':
+                          availability.displayOf(attachment.attachmentId)?.action?.kind === 'unpin',
+                      }"
+                      :text="availability.displayOf(attachment.attachmentId)?.action?.kind !== 'unpin'"
+                      :severity="
+                        availability.displayOf(attachment.attachmentId)?.action?.kind === 'unpin'
+                          ? 'primary'
+                          : 'secondary'
+                      "
+                      :aria-pressed="availability.displayOf(attachment.attachmentId)?.action?.kind === 'unpin'"
+                      :aria-label="`${availability.displayOf(attachment.attachmentId)?.action?.label}: ${attachment.fileName}`"
+                      :title="availability.displayOf(attachment.attachmentId)?.action?.label"
+                      :disabled="availability.pinBusy.value"
+                      @click="availability.togglePin(attachment.attachmentId)"
+                    />
                     <Button
                       icon="pi pi-eye"
                       rounded
@@ -679,6 +792,59 @@ async function copyInfoValue(value: string, labelKey: MessageKey) {
 
 .attachment-item__details {
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+.attachment-item__availability {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-right: -0.4rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.attachment-item__availability--pin {
+  color: var(--p-button-text-primary-color, var(--p-primary-color, #5298f7));
+}
+
+.attachment-item__availability--error {
+  color: var(--p-red-400, #f87171);
+}
+
+.attachment-item__ring {
+  width: 1.1rem;
+  height: 1.1rem;
+  transform: rotate(-90deg);
+}
+
+.attachment-item__ring circle {
+  fill: none;
+  stroke-width: 2.5;
+}
+
+.attachment-item__ring-track {
+  stroke: color-mix(in srgb, currentColor 25%, transparent);
+}
+
+.attachment-item__ring-done {
+  stroke: var(--p-primary-color, #5298f7);
+  stroke-linecap: round;
+  transition: stroke-dasharray 200ms ease;
+}
+
+/* Pinned: a filled button, so the state shows on the control itself. */
+.attachment-item__pin--active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--p-primary-color, #5298f7) 30%, transparent);
+}
+
+.attachments-panel__remote-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
 .attachment-item__details strong,

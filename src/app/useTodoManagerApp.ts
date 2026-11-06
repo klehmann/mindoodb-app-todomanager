@@ -30,6 +30,11 @@ export function useTodoManagerApp() {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const successMessage = ref<string | null>(null);
+  /**
+   * What runs right now, as an internal English key ("Saving todo", …). It is
+   * never shown: it only makes the app busy and drives button spinners
+   * (TodoDialog compares it), so it is deliberately not translated.
+   */
   const busyAction = ref<string | null>(null);
   const hostTheme = ref(normalizeAppTheme());
   const hostViewport = ref<MindooDBAppViewport | null>(null);
