@@ -981,9 +981,7 @@ export function useTodos(options: UseTodosOptions) {
       throw new Error(t("databaseOpenFailed"));
     }
 
-    options.busyAction.value = isDialogAttachmentNotOnDevice(attachmentName)
-      ? t("offlineLoadingFromServer")
-      : "Opening attachment preview";
+    options.busyAction.value = "Opening attachment preview";
     options.error.value = null;
 
     try {
@@ -1007,9 +1005,7 @@ export function useTodos(options: UseTodosOptions) {
       throw new Error(t("databaseOpenFailed"));
     }
 
-    options.busyAction.value = isDialogAttachmentNotOnDevice(attachmentName)
-      ? t("offlineLoadingFromServer")
-      : "Extracting attachment";
+    options.busyAction.value = "Extracting attachment";
     options.error.value = null;
 
     try {
