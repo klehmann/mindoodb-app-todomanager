@@ -13,9 +13,20 @@ import {
 import { useTodoAgentTools } from "@/features/agent/useTodoAgentTools";
 import { usePeriodicSync } from "@/features/sync/composables/usePeriodicSync";
 import { useTodos } from "@/features/todos/composables/useTodos";
-import type { TodoQuadrant, TodoSyncMode } from "@/features/todos/composables/todoTypes";
+import { buildTodoSelectionKey, type TodoQuadrant, type TodoSyncMode } from "@/features/todos/composables/todoTypes";
 import { formatDateTime, setLocale, t } from "@/lib/i18n";
 import { applyAppTheme, normalizeAppTheme } from "@/lib/theme";
+
+/** A run of one of the app's `actions` (`MindooDBAppActionInvoked` from App SDK 0.0.91 on). */
+interface QuickActionRun {
+  id: string;
+  text?: string;
+}
+
+/** `session.actions` exists from App SDK 0.0.91 on; older SDK types and hosts lack it. */
+type ActionsSession = MindooDBAppSession & {
+  actions?: { onInvoked(handler: (run: QuickActionRun) => void | Promise<void>): () => void };
+};
 
 function readErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -46,6 +57,8 @@ export function useTodoManagerApp() {
   const localViewportWidth = ref(typeof window !== "undefined" ? window.innerWidth : 1440);
 
   let stopThemeSync: (() => void) | null = null;
+
+  let stopActions: (() => void) | null = null;
   let stopViewportSync: (() => void) | null = null;
   let stopUiPreferencesSync: (() => void) | null = null;
   let stopLocaleSync: (() => void) | null = null;
@@ -126,7 +139,38 @@ export function useTodoManagerApp() {
     });
   }
 
+  /**
+   * Quick action `new-todo` from iOS Shortcuts / the Action Button ("Run Haven
+   * action"): with text it creates the todo right away in the preferred
+   * database, without text it opens the "New todo" dialog.
+   */
+  async function runAction(run: QuickActionRun) {
+    if (run.id !== "new-todo") {
+      return;
+    }
+    const subject = run.text?.trim() ?? "";
+    if (!subject) {
+      todos.startCreateTodo();
+      return;
+    }
+    const databaseId = [preferredDatabaseId.value, ...selectedDatabaseIds.value, ...databases.value.map((entry) => entry.id)]
+      .find((id) => id && todos.createTargetDatabases.value.some((entry) => entry.id === id && entry.capabilities.includes("create")));
+    if (!databaseId) {
+      error.value = t("createNotAllowed");
+      return;
+    }
+    try {
+      const { created } = await todos.createTodos([{ databaseId, fields: { subject } }], `Create "${subject}"`);
+      todos.setSelectedTodoIds(created.map((entry) => buildTodoSelectionKey(entry.databaseId, entry.id)));
+      setSuccess(t("created", { subject }));
+    } catch (createError) {
+      error.value = readErrorMessage(createError, t("createNotAllowed"));
+    }
+  }
+
   function teardownSubscriptions() {
+    stopActions?.();
+    stopActions = null;
     stopThemeSync?.();
     stopThemeSync = null;
     stopViewportSync?.();
@@ -192,6 +236,9 @@ export function useTodoManagerApp() {
         selectedDatabaseIds.value = [];
         await periodicSync.runSync("initial");
       }
+      // Listen once the board is loaded; a run that started the app waits in Haven until then.
+      stopActions?.();
+      stopActions = (nextSession as ActionsSession).actions?.onInvoked((run) => runAction(run)) ?? null;
     } catch (connectError) {
       applyAppTheme();
       error.value = readErrorMessage(
