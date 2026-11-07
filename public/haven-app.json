@@ -25,6 +25,43 @@
     }
   ],
   "publicUrl": "https://app-todomanager.mindoodb.com/",
+  "actions": [
+    {
+      "id": "new-todo",
+      "title": {
+        "en": "New todo",
+        "de": "Neue Aufgabe",
+        "es": "Nueva tarea",
+        "fr": "Nouvelle tâche",
+        "it": "Nuova attività",
+        "nb": "Ny oppgave",
+        "nl": "Nieuwe taak",
+        "pl": "Nowe zadanie"
+      },
+      "description": {
+        "en": "Adds a todo with the given text, or opens the New todo dialog without text.",
+        "de": "Legt eine Aufgabe mit dem Text an oder öffnet ohne Text den Dialog „Neue Aufgabe“.",
+        "es": "Añade una tarea con el texto o, sin texto, abre el diálogo Nueva tarea.",
+        "fr": "Ajoute une tâche avec le texte ou, sans texte, ouvre la boîte Nouvelle tâche.",
+        "it": "Aggiunge un’attività con il testo o, senza testo, apre la finestra Nuova attività.",
+        "nb": "Legger til en oppgave med teksten, eller åpner dialogen Ny oppgave uten tekst.",
+        "nl": "Voegt een taak met de tekst toe of opent zonder tekst het venster Nieuwe taak.",
+        "pl": "Dodaje zadanie z tekstem albo bez tekstu otwiera okno Nowe zadanie."
+      },
+      "text": {
+        "label": {
+          "en": "Subject",
+          "de": "Betreff",
+          "es": "Asunto",
+          "fr": "Objet",
+          "it": "Oggetto",
+          "nb": "Emne",
+          "nl": "Onderwerp",
+          "pl": "Temat"
+        }
+      }
+    }
+  ],
   "listing": {
     "shareImage": "listing/share.png",
     "summary": {
