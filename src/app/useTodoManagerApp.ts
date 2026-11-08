@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import {
   createMindooDBAppBridge,
+  type MindooDBAppActionInvoked,
   type MindooDBAppDatabase,
   type MindooDBAppDatabaseInfo,
   type MindooDBAppHostTheme,
@@ -17,16 +18,6 @@ import { buildTodoSelectionKey, type TodoQuadrant, type TodoSyncMode } from "@/f
 import { formatDateTime, setLocale, t } from "@/lib/i18n";
 import { applyAppTheme, normalizeAppTheme } from "@/lib/theme";
 
-/** A run of one of the app's `actions` (`MindooDBAppActionInvoked` from App SDK 0.0.91 on). */
-interface QuickActionRun {
-  id: string;
-  text?: string;
-}
-
-/** `session.actions` exists from App SDK 0.0.91 on; older SDK types and hosts lack it. */
-type ActionsSession = MindooDBAppSession & {
-  actions?: { onInvoked(handler: (run: QuickActionRun) => void | Promise<void>): () => void };
-};
 
 function readErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -144,7 +135,7 @@ export function useTodoManagerApp() {
    * action"): with text it creates the todo right away in the preferred
    * database, without text it opens the "New todo" dialog.
    */
-  async function runAction(run: QuickActionRun) {
+  async function runAction(run: MindooDBAppActionInvoked) {
     if (run.id !== "new-todo") {
       return;
     }
@@ -238,7 +229,7 @@ export function useTodoManagerApp() {
       }
       // Listen once the board is loaded; a run that started the app waits in Haven until then.
       stopActions?.();
-      stopActions = (nextSession as ActionsSession).actions?.onInvoked((run) => runAction(run)) ?? null;
+      stopActions = nextSession.actions?.onInvoked((run) => runAction(run)) ?? null;
     } catch (connectError) {
       applyAppTheme();
       error.value = readErrorMessage(
