@@ -664,6 +664,14 @@ async function copyInfoValue(value: string, labelKey: MessageKey) {
         </div>
 
         <Button
+          v-if="props.app.dialogMode.value === 'edit' && props.app.canLinkTodos.value"
+          :label="t('copyLink')"
+          icon="pi pi-link"
+          text
+          data-testid="todo-copy-link"
+          @click="props.app.copyTodoLink()"
+        />
+        <Button
           class="dialog-footer__close"
           :label="t('close')"
           text

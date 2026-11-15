@@ -1,4 +1,5 @@
 import { computed, onBeforeUnmount, ref } from "vue";
+import { canLinkDocuments, copyDocumentLink } from "@/lib/documentLink";
 import {
   createMindooDBAppBridge,
   type MindooDBAppActionInvoked,
@@ -162,6 +163,8 @@ export function useTodoManagerApp() {
   function teardownSubscriptions() {
     stopActions?.();
     stopActions = null;
+    stopLinks?.();
+    stopLinks = null;
     stopThemeSync?.();
     stopThemeSync = null;
     stopViewportSync?.();
@@ -227,6 +230,11 @@ export function useTodoManagerApp() {
         selectedDatabaseIds.value = [];
         await periodicSync.runSync("initial");
       }
+      // A link to a todo (`/open/…`, from a chat or a mail) opens it in the dialog.
+      stopLinks?.();
+      stopLinks = canLinkDocuments(nextSession)
+        ? nextSession.links.onOpened(({ databaseId, docId }) => openLinkedTodo(databaseId, docId))
+        : null;
       // Listen once the board is loaded; a run that started the app waits in Haven until then.
       stopActions?.();
       stopActions = nextSession.actions?.onInvoked((run) => runAction(run)) ?? null;
@@ -240,6 +248,49 @@ export function useTodoManagerApp() {
       loading.value = false;
     }
   }
+
+  let stopLinks: (() => void) | null = null;
+
+  function notifyLink(severity: "info" | "error", text: string) {
+    void session.value?.notify({ severity, text, durationMs: severity === "error" ? 10_000 : 3_000 }).catch(() => undefined);
+  }
+
+  async function openLinkedTodo(databaseId: string, docId: string) {
+    if (!databases.value.some((entry) => entry.id === databaseId)) {
+      notifyLink("error", t("linkMissing"));
+      return;
+    }
+    if (!selectedDatabaseIds.value.includes(databaseId)) {
+      await selectDatabases([...selectedDatabaseIds.value, databaseId]);
+    }
+    const key = buildTodoSelectionKey(databaseId, docId);
+    if (!todos.todos.value.some((todo) => todo.selectionKey === key)) {
+      notifyLink("error", t("linkMissing"));
+      return;
+    }
+    await todos.openTodo(key);
+  }
+
+  /** "Copy link" in the todo dialog: Haven confirms it; only the app's own copy or a failure is said here. */
+  async function copyTodoLink() {
+    const current = session.value;
+    const databaseId = todos.dialogDatabaseId.value;
+    const docId = todos.dialogDocumentId.value;
+    if (!current || !databaseId || !docId) return;
+    try {
+      const result = await copyDocumentLink(current, {
+        databaseId,
+        docId,
+        title: todos.draft.value.subject.trim() || t("untitledTodo"),
+      });
+      if (result.status === "copiedByApp") notifyLink("info", t("linkCopied"));
+      else if (result.status === "failed") notifyLink("error", t("linkCopyFailed", { url: result.url }));
+    } catch (copyError) {
+      notifyLink("error", t("linkCopyFailed", { url: readErrorMessage(copyError, "") }));
+    }
+  }
+
+  const canLinkTodos = computed(() => canLinkDocuments(session.value));
 
   async function disconnect() {
     teardownSubscriptions();
@@ -361,6 +412,8 @@ export function useTodoManagerApp() {
     refreshNow,
     setRefreshMode: periodicSync.setRefreshMode,
     setMobileQuadrant,
+    canLinkTodos,
+    copyTodoLink,
     ...todos,
   };
 }
