@@ -34,6 +34,10 @@ import {
   type TodoSnapshot,
   type TodoSortMode,
 } from "./todoTypes";
+import { listTodos, type TodoListing } from "./listTodos";
+
+/** How soon the board lists again while a summary buffer is being built. */
+const SUMMARY_RELIST_MS = 2000;
 
 function readErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -638,35 +642,39 @@ export function useTodos(options: UseTodosOptions) {
     };
   }
 
-  async function listDatabaseTodos(databaseId: string) {
+  async function readDatabaseTodos(databaseId: string, listOptions: { requireComplete?: boolean } = {}): Promise<TodoListing> {
     const databaseInfo = databaseInfoById.value[databaseId];
     if (!databaseInfo?.capabilities.includes("read")) {
-      return [];
+      return { todos: [], complete: true };
     }
 
     const database = await options.getDatabase(databaseId);
     if (!database) {
-      return [];
+      return { todos: [], complete: true };
     }
 
-    const items: TodoItem[] = [];
-    let cursor: string | null = null;
+    return await listTodos(database, databaseId, listOptions);
+  }
 
-    while (true) {
-      const page = await database.documents.list({
-        cursor,
-        limit: 250,
-        status: "existing",
-      });
+  /** Every todo of one database, complete even while its summary is being built (agent tools). */
+  async function listDatabaseTodos(databaseId: string): Promise<TodoItem[]> {
+    return (await readDatabaseTodos(databaseId, { requireComplete: true })).todos;
+  }
 
-      items.push(...page.items.map((item) => readTodoItem(item, databaseId)));
-      if (!page.nextCursor || page.nextCursor === cursor) {
-        break;
-      }
-      cursor = page.nextCursor;
+  /** While a summary buffer is still being built, the board lists again shortly. */
+  let relistHandle: ReturnType<typeof setTimeout> | null = null;
+  function scheduleRelist(incomplete: boolean) {
+    if (relistHandle !== null) {
+      clearTimeout(relistHandle);
+      relistHandle = null;
     }
-
-    return items;
+    if (!incomplete) {
+      return;
+    }
+    relistHandle = setTimeout(() => {
+      relistHandle = null;
+      void listAllTodos().catch(() => {});
+    }, SUMMARY_RELIST_MS);
   }
 
   async function listAllTodos() {
@@ -685,10 +693,11 @@ export function useTodos(options: UseTodosOptions) {
 
     const groups = await Promise.all(
       readableDatabaseIds.map(
-        async (databaseId) => await listDatabaseTodos(databaseId),
+        async (databaseId) => await readDatabaseTodos(databaseId),
       ),
     );
-    todos.value = groups.flat();
+    todos.value = groups.flatMap((group) => group.todos);
+    scheduleRelist(groups.some((group) => !group.complete));
     if (searchQuery.value.trim()) {
       await runTodoSearch();
     }
@@ -1431,6 +1440,10 @@ export function useTodos(options: UseTodosOptions) {
       searchDebounceHandle = null;
     }
     searchRunToken += 1;
+    if (relistHandle !== null) {
+      clearTimeout(relistHandle);
+      relistHandle = null;
+    }
   });
 
   return {
